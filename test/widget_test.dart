@@ -174,6 +174,17 @@ void main() {
     await _settle(tester);
   });
 
+  testWidgets('life totals stay the same size from 40 down to 9', (
+    tester,
+  ) async {
+    await _pumpApp(tester);
+    final before = tester.getRect(_textInSeat(_bottom, '40'));
+    _game.changeLife(_bottom, -31);
+    await tester.pump();
+    final after = tester.getRect(_textInSeat(_bottom, '9'));
+    expect(after.height, closeTo(before.height, 0.5));
+  });
+
   testWidgets('holding repeats in steps of 10', (tester) async {
     await _pumpApp(tester);
     final rect = tester.getRect(_seat(_bottom));

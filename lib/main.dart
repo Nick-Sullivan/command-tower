@@ -48,9 +48,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Command Tower',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-      ),
+      // Always dark: the table is dark, and a bright menu over it is
+      // jarring, especially in a dim room.
+      themeMode: ThemeMode.dark,
       darkTheme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,

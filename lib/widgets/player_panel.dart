@@ -15,7 +15,7 @@ const playerColors = [
   Color(0xFF27AE60), // green
   Color(0xFFD68910), // amber
   Color(0xFF8E44AD), // purple
-  Color(0xFF546E7A), // slate
+  Color(0xFFD81B60), // pink
 ];
 
 /// Formats a number with a true minus sign, which reads better than a hyphen
@@ -246,52 +246,64 @@ class _PlayerPanelState extends State<PlayerPanel> {
       children: [
         PlusMinusArea(
           onChange: _changeLife,
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: size.height * 0.14,
-                  width: size.width * 0.3,
-                  // A knocked-out player gets a skull above their total, as
-                  // lethal commander damage does; a running change takes its
-                  // place while it's showing.
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      AnimatedOpacity(
-                        opacity: widget.knockedOut && !_showDelta ? 1 : 0,
-                        duration: const Duration(milliseconds: 300),
-                        child: const FittedBox(
-                          child: Skull(
-                            key: ValueKey('knocked-out-skull'),
-                            size: 48,
+          // The total gets all the room above the button bar, so it's as big
+          // as the panel allows, side panels included.
+          child: Column(
+            children: [
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, area) => Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: area.maxHeight * 0.18,
+                          width: area.maxWidth * 0.3,
+                          // A knocked-out player gets a skull above their
+                          // total, as lethal commander damage does; a running
+                          // change takes its place while it's showing.
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              AnimatedOpacity(
+                                opacity: widget.knockedOut && !_showDelta
+                                    ? 1
+                                    : 0,
+                                duration: const Duration(milliseconds: 300),
+                                child: const FittedBox(
+                                  child: Skull(
+                                    key: ValueKey('knocked-out-skull'),
+                                    size: 48,
+                                  ),
+                                ),
+                              ),
+                              _deltaText(),
+                            ],
                           ),
                         ),
-                      ),
-                      _deltaText(),
-                    ],
-                  ),
-                ),
-                SizedBox(
-                  height: size.height * 0.5,
-                  width: size.width * 0.6,
-                  child: FittedBox(
-                    child: Text(
-                      formatNumber(widget.life),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 120,
-                        fontWeight: FontWeight.w600,
-                        height: 1,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
+                        SizedBox(
+                          height: area.maxHeight * 0.74,
+                          width: area.maxWidth * 0.75,
+                          child: FittedBox(
+                            child: _twoDigitWide(
+                              formatNumber(widget.life),
+                              const TextStyle(
+                                color: Colors.white,
+                                fontSize: 120,
+                                fontWeight: FontWeight.w600,
+                                height: 1,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                SizedBox(height: size.height * 0.14),
-              ],
-            ),
+              ),
+              SizedBox(height: barHeight),
+            ],
           ),
         ),
         Positioned(
@@ -304,6 +316,16 @@ class _PlayerPanelState extends State<PlayerPanel> {
       ],
     );
   }
+
+  /// [text] laid out at least as wide as "00", so a FittedBox draws 9 and
+  /// 40 at the same size rather than blowing single digits up.
+  static Widget _twoDigitWide(String text, TextStyle style) => Stack(
+    alignment: Alignment.center,
+    children: [
+      Opacity(opacity: 0, child: Text('00', style: style)),
+      Text(text, style: style),
+    ],
+  );
 
   Widget _counterView(CounterValue shown, Size size, double barHeight) {
     final counter = shown.counter;

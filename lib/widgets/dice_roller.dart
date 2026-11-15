@@ -117,7 +117,7 @@ class _DieButton extends StatefulWidget {
 class _DieButtonState extends State<_DieButton> {
   static const _tumbleFor = Duration(milliseconds: 600);
   static const _tumbleEvery = Duration(milliseconds: 60);
-  static const _size = 72.0;
+  static const _size = 96.0;
 
   int? _result;
   bool _rolling = false;
@@ -167,7 +167,7 @@ class _DieButtonState extends State<_DieButton> {
         child: SizedBox.square(
           dimension: _size,
           child: Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
             child: result == null
                 ? FittedBox(
                     child: Text(
@@ -187,7 +187,7 @@ class _DieButtonState extends State<_DieButton> {
                           color: scheme.onPrimaryContainer.withValues(
                             alpha: 0.6,
                           ),
-                          fontSize: 11,
+                          fontSize: 12,
                         ),
                       ),
                       Expanded(

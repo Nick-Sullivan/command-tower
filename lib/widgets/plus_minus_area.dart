@@ -75,7 +75,7 @@ class _PlusMinusAreaState extends State<PlusMinusArea> {
     setState(() => _fingersDown[sign] = _fingersDown[sign]! + by);
   }
 
-  Widget _half(int sign, String mark, Alignment alignment) {
+  Widget _half(int sign, IconData mark, Alignment alignment) {
     final pressed = _fingersDown[sign]! > 0;
     // A Listener sees every finger without competing with the tap and hold
     // gestures below it.
@@ -97,13 +97,12 @@ class _PlusMinusAreaState extends State<PlusMinusArea> {
             color: pressed ? _pressedColor : _pressedColor.withAlpha(0),
             alignment: alignment,
             padding: EdgeInsets.symmetric(horizontal: widget.markSize / 2),
-            child: Text(
+            // Icons rather than − and + characters: even strokes that read
+            // clearly from any seat.
+            child: Icon(
               mark,
-              style: TextStyle(
-                color: const Color(0x59FFFFFF),
-                fontSize: widget.markSize,
-                fontWeight: FontWeight.w300,
-              ),
+              size: widget.markSize,
+              color: const Color(0x66FFFFFF),
             ),
           ),
         ),
@@ -118,8 +117,8 @@ class _PlusMinusAreaState extends State<PlusMinusArea> {
       children: [
         Row(
           children: [
-            _half(-1, '−', Alignment.centerLeft),
-            _half(1, '+', Alignment.centerRight),
+            _half(-1, Icons.remove, Alignment.centerLeft),
+            _half(1, Icons.add, Alignment.centerRight),
           ],
         ),
         IgnorePointer(child: widget.child),
