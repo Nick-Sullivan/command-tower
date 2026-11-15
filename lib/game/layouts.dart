@@ -71,6 +71,11 @@ const Map<int, List<TableLayout>> tableLayouts = {
       Seat(Rect.fromLTRB(.5, 0, 1, 1), _right),
       Seat(Rect.fromLTRB(0, 0, .5, 1), _left),
     ]),
+    // Side by side, on the same side.
+    TableLayout([
+      Seat(Rect.fromLTRB(0, .5, 1, 1), _left),
+      Seat(Rect.fromLTRB(0, 0, 1, .5), _left),
+    ]),
   ],
   3: [
     TableLayout([
@@ -82,6 +87,12 @@ const Map<int, List<TableLayout>> tableLayouts = {
       Seat(Rect.fromLTRB(.5, 0, 1, .6), _right),
       Seat(Rect.fromLTRB(0, .6, 1, 1), _bottom),
       Seat(Rect.fromLTRB(0, 0, .5, .6), _left),
+    ]),
+    // One on one side, two on the other.
+    TableLayout([
+      Seat(Rect.fromLTRB(.5, 0, 1, 1), _right),
+      Seat(Rect.fromLTRB(0, .5, .5, 1), _left),
+      Seat(Rect.fromLTRB(0, 0, .5, .5), _left),
     ]),
   ],
   4: [
@@ -114,6 +125,14 @@ const Map<int, List<TableLayout>> tableLayouts = {
       Seat(Rect.fromLTRB(.5, .65, 1, 1), _right),
       Seat(Rect.fromLTRB(0, .65, .5, 1), _left),
       Seat(Rect.fromLTRB(0, .3, .5, .65), _left),
+    ]),
+    // Three on one side, two on the other.
+    TableLayout([
+      Seat(Rect.fromLTRB(.5, 0, 1, 1 / 3), _right),
+      Seat(Rect.fromLTRB(.5, 1 / 3, 1, 2 / 3), _right),
+      Seat(Rect.fromLTRB(.5, 2 / 3, 1, 1), _right),
+      Seat(Rect.fromLTRB(0, .5, .5, 1), _left),
+      Seat(Rect.fromLTRB(0, 0, .5, .5), _left),
     ]),
   ],
   6: [
