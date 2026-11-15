@@ -37,6 +37,39 @@ class Game extends ChangeNotifier {
     notifyListeners();
   }
 
+  Map<String, Object?> toJson() => {
+    'playerCount': _playerCount,
+    'layoutIndex': _layoutIndex,
+    'startingLife': _startingLife,
+    'life': _life,
+  };
+
+  /// Restores a saved game, or returns null if [json] isn't one this version
+  /// can play — e.g. a layout that no longer exists.
+  static Game? fromJson(Map<String, Object?> json) {
+    final playerCount = json['playerCount'];
+    final layoutIndex = json['layoutIndex'];
+    final startingLife = json['startingLife'];
+    final life = json['life'];
+    if (playerCount is! int ||
+        layoutIndex is! int ||
+        startingLife is! int ||
+        life is! List ||
+        life.length != playerCount ||
+        life.any((l) => l is! int)) {
+      return null;
+    }
+    final layouts = tableLayouts[playerCount];
+    if (layouts == null || layoutIndex < 0 || layoutIndex >= layouts.length) {
+      return null;
+    }
+    return Game(
+      playerCount: playerCount,
+      layoutIndex: layoutIndex,
+      startingLife: startingLife,
+    ).._life = life.cast<int>().toList();
+  }
+
   void _start(int playerCount, int layoutIndex, int startingLife) {
     assert(tableLayouts.containsKey(playerCount));
     assert(layoutIndex < tableLayouts[playerCount]!.length);

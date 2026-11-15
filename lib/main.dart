@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'game/game.dart';
+import 'game/game_store.dart';
 import 'widgets/game_screen.dart';
 
 Future<void> main() async {
@@ -12,24 +13,16 @@ Future<void> main() async {
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   await WakelockPlus.enable();
-  runApp(const MyApp());
+  final store = await GameStore.open();
+  final game = store.load();
+  store.autosave(game);
+  runApp(MyApp(game: game));
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key, required this.game});
 
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  final _game = Game();
-
-  @override
-  void dispose() {
-    _game.dispose();
-    super.dispose();
-  }
+  final Game game;
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +38,7 @@ class _MyAppState extends State<MyApp> {
           brightness: Brightness.dark,
         ),
       ),
-      home: Scaffold(body: GameScreen(game: _game)),
+      home: Scaffold(body: GameScreen(game: game)),
     );
   }
 }

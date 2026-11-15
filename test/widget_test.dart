@@ -1,3 +1,4 @@
+import 'package:command_tower/game/game.dart';
 import 'package:command_tower/main.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +17,9 @@ Future<void> _pumpApp(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2220);
   tester.view.devicePixelRatio = 2.75;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(const MyApp());
+  final game = Game();
+  addTearDown(game.dispose);
+  await tester.pumpWidget(MyApp(game: game));
 }
 
 /// Lets the running delta fade so no timers are left pending.
