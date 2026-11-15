@@ -5,6 +5,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'game/game.dart';
 import 'game/game_store.dart';
 import 'settings/app_settings.dart';
+import 'sound/sounds.dart';
 import 'widgets/game_screen.dart';
 
 Future<void> main() async {
@@ -18,17 +19,28 @@ Future<void> main() async {
   final game = store.load();
   store.autosave(game);
   final settings = await AppSettings.open();
-  runApp(MyApp(game: game, settings: settings));
+  runApp(MyApp(game: game, settings: settings, sounds: AudioSoundPlayer()));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, required this.game, required this.settings});
+  const MyApp({
+    super.key,
+    required this.game,
+    required this.settings,
+    required this.sounds,
+  });
 
   final Game game;
   final AppSettings settings;
+  final SoundPlayer sounds;
 
   @override
   Widget build(BuildContext context) {
+    // Above the MaterialApp, so dialogs can play sounds too.
+    return SoundScope(settings: settings, player: sounds, child: _app());
+  }
+
+  Widget _app() {
     return MaterialApp(
       title: 'Command Tower',
       debugShowCheckedModeBanner: false,

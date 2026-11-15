@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../game/game.dart';
 import '../game/layouts.dart';
 import '../settings/app_settings.dart';
+import '../settings/sound_settings.dart';
 import '../settings/tracking_settings.dart';
 import 'player_panel.dart';
 
@@ -31,7 +32,7 @@ class GameMenuButton extends StatelessWidget {
 
 /// The quick settings: what you choose every game. Nothing here changes until
 /// Start, so a game in progress can't be reset by accident. Everything rarer
-/// is on the second tab.
+/// is on the other tabs.
 class GameMenuDialog extends StatefulWidget {
   const GameMenuDialog({super.key, required this.game, required this.settings});
 
@@ -48,7 +49,7 @@ class _GameMenuDialogState extends State<GameMenuDialog>
   late int _layout = widget.game.layoutIndex;
   late int _life = widget.game.startingLife;
 
-  late final _tabs = TabController(length: 2, vsync: this)
+  late final _tabs = TabController(length: 3, vsync: this)
     ..addListener(() => setState(() {}));
   bool get _onNewGame => _tabs.index == 0;
 
@@ -75,13 +76,16 @@ class _GameMenuDialogState extends State<GameMenuDialog>
       titlePadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       title: TabBar(
         controller: _tabs,
+        // Tighter than the default so three labels fit without cutting off.
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
         tabs: const [
           Tab(text: 'New game'),
           Tab(text: 'Tracking'),
+          Tab(text: 'Sound'),
         ],
       ),
-      // New game waits for Start; tracking applies as it's chosen, so that
-      // tab only needs closing.
+      // New game waits for Start; the other tabs apply as you choose, so they
+      // only need closing.
       actions: _onNewGame
           ? [
               TextButton(
@@ -107,6 +111,7 @@ class _GameMenuDialogState extends State<GameMenuDialog>
             children: [
               _newGame(titleStyle, layouts),
               TrackingSettings(settings: widget.settings),
+              SoundSettings(settings: widget.settings),
             ],
           ),
         ),

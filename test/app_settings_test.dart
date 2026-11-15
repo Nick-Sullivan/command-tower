@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:command_tower/game/counters.dart';
+import 'package:command_tower/sound/sounds.dart';
 import 'package:command_tower/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,6 +25,56 @@ void main() {
   test('counters are declared alphabetically', () {
     final labels = [for (final c in Counter.values) c.label];
     expect(labels, [...labels]..sort());
+  });
+
+  test('sound is off by default; choices are remembered', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await AppSettings.open();
+    expect(settings.soundOn, isFalse);
+    expect(settings.sound(SoundRole.minus), Sound.hurt);
+    expect(settings.sound(SoundRole.plus), Sound.doubleCoin);
+    expect(settings.sound(SoundRole.knockedOut), Sound.fall);
+
+    settings.setSoundOn(true);
+    settings.setSound(SoundRole.minus, Sound.none);
+    settings.setSound(SoundRole.plus, Sound.phaserUp);
+    final relaunched = await AppSettings.open();
+    expect(relaunched.soundOn, isTrue);
+    expect(relaunched.sound(SoundRole.minus), Sound.none);
+    expect(relaunched.sound(SoundRole.plus), Sound.phaserUp);
+  });
+
+  test('a saved sound that is no longer offered falls back to default', () {
+    // e.g. 'thud' from the first version, or a sound from another role.
+    SharedPreferences.setMockInitialValues({
+      'sound.minus': 'thud',
+      'sound.plus': 'youLose',
+    });
+    return AppSettings.open().then((settings) {
+      expect(settings.sound(SoundRole.minus), Sound.hurt);
+      expect(settings.sound(SoundRole.plus), Sound.doubleCoin);
+    });
+  });
+
+  test('every role has choices, and every sound its file', () {
+    for (final role in SoundRole.values) {
+      expect(Sound.forRole(role).length, greaterThan(1), reason: role.name);
+    }
+    for (final sound in Sound.values) {
+      if (sound == Sound.none) continue;
+      expect(sound.role, isNotNull);
+    }
+  });
+
+  test('every built-in sound has its file', () {
+    for (final sound in Sound.values) {
+      if (sound == Sound.none) continue;
+      expect(
+        File('assets/${sound.asset}').existsSync(),
+        isTrue,
+        reason: sound.name,
+      );
+    }
   });
 
   test('commander damage is on until turned off, and stays off', () async {

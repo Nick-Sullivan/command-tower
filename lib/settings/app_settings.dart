@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../game/counters.dart';
+import '../sound/sounds.dart';
 
 /// Choices that outlast a single game, from the Tracking tab. Every change is
 /// saved straight away.
@@ -16,6 +17,7 @@ class AppSettings extends ChangeNotifier {
 
   static const _countersKey = 'counters';
   static const _commanderDamageKey = 'commanderDamage';
+  static const _soundOnKey = 'soundOn';
 
   final SharedPreferences _prefs;
   late Set<Counter> _counters;
@@ -30,6 +32,38 @@ class AppSettings extends ChangeNotifier {
   void setCommanderDamage(bool on) {
     if (on == commanderDamage) return;
     _prefs.setBool(_commanderDamageKey, on);
+    notifyListeners();
+  }
+
+  /// Off until turned on: a phone at a quiet table shouldn't make noise.
+  bool get soundOn => _prefs.getBool(_soundOnKey) ?? false;
+
+  void setSoundOn(bool on) {
+    if (on == soundOn) return;
+    _prefs.setBool(_soundOnKey, on);
+    notifyListeners();
+  }
+
+  static const _defaultSounds = {
+    SoundRole.minus: Sound.hurt,
+    SoundRole.plus: Sound.doubleCoin,
+    SoundRole.knockedOut: Sound.fall,
+  };
+
+  static String _soundKey(SoundRole role) => 'sound.${role.name}';
+
+  /// The sound chosen for [role]. A saved choice that's no longer offered
+  /// for it (e.g. from an older version) falls back to the default.
+  Sound sound(SoundRole role) {
+    final name = _prefs.getString(_soundKey(role));
+    return Sound.forRole(role).where((s) => s.name == name).firstOrNull ??
+        _defaultSounds[role]!;
+  }
+
+  void setSound(SoundRole role, Sound sound) {
+    assert(Sound.forRole(role).contains(sound));
+    if (sound == this.sound(role)) return;
+    _prefs.setString(_soundKey(role), sound.name);
     notifyListeners();
   }
 

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../sound/sounds.dart';
+
 /// A surface whose left half lowers a value and right half raises it: tap for
 /// 1, hold to repeat in steps of 10. The pressed half lights up, and every
 /// change gives a light haptic click. [child] is drawn on top and ignores
@@ -40,6 +42,7 @@ class _PlusMinusAreaState extends State<PlusMinusArea> {
     // phones play it at zero strength. Android still skips this when the user
     // has touch feedback turned off.
     HapticFeedback.lightImpact();
+    SoundScope.tap(context, change.sign);
     widget.onChange(change);
   }
 

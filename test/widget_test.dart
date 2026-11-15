@@ -1,6 +1,7 @@
 import 'package:command_tower/game/game.dart';
 import 'package:command_tower/main.dart';
 import 'package:command_tower/settings/app_settings.dart';
+import 'package:command_tower/sound/sounds.dart';
 import 'package:command_tower/widgets/player_panel.dart';
 import 'package:command_tower/widgets/skull.dart';
 import 'package:flutter/gestures.dart';
@@ -17,6 +18,16 @@ Finder _seat(int i) => find.byKey(ValueKey(('seat', i)));
 Finder _textInSeat(int i, String text) =>
     find.descendant(of: _seat(i), matching: find.text(text));
 
+/// Records what would have played, instead of playing it.
+class _FakeSounds implements SoundPlayer {
+  final played = <Sound>[];
+
+  @override
+  void play(Sound sound) => played.add(sound);
+}
+
+late _FakeSounds _sounds;
+
 Future<AppSettings> _pumpApp(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2220);
   tester.view.devicePixelRatio = 2.75;
@@ -26,13 +37,17 @@ Future<AppSettings> _pumpApp(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues({});
   final settings = await AppSettings.open();
   addTearDown(settings.dispose);
-  await tester.pumpWidget(MyApp(game: game, settings: settings));
+  _sounds = _FakeSounds();
+  await tester.pumpWidget(
+    MyApp(game: game, settings: settings, sounds: _sounds),
+  );
   return settings;
 }
 
-/// Lets the running delta fade so no timers are left pending.
+/// Lets the running delta fade and any counter view time out, so no timers
+/// are left pending.
 Future<void> _settle(WidgetTester tester) =>
-    tester.pump(const Duration(seconds: 3));
+    tester.pump(const Duration(seconds: 6));
 
 void main() {
   testWidgets('tapping the left half lowers life, the right raises it', (
@@ -436,6 +451,28 @@ void main() {
       );
     });
 
+    testWidgets('a counter goes back to life 5 seconds after the last tap', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      settings.setCounter(Counter.poison, true);
+      await tester.pump();
+      await tester.tap(counterButton(_bottom, Counter.poison));
+      await tester.pump();
+      final area = tester.getRect(counterArea(_bottom, Counter.poison));
+
+      // Each tap restarts the countdown.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.tapAt(Offset(area.right - area.width / 4, area.center.dy));
+      await tester.pump(const Duration(seconds: 4));
+      expect(counterArea(_bottom, Counter.poison), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(counterArea(_bottom, Counter.poison), findsNothing);
+      expect(_textInSeat(_bottom, '40'), findsOneWidget);
+      await _settle(tester);
+    });
+
     testWidgets('the buttons stay centred in every view', (tester) async {
       final settings = await _pumpApp(tester);
       final panel = tester.getRect(_seat(_bottom));
@@ -505,6 +542,117 @@ void main() {
       await tester.pump();
       expect(counterArea(_bottom, Counter.energy), findsNothing);
       expect(_textInSeat(_bottom, '40'), findsOneWidget);
+    });
+  });
+
+  group('sound', () {
+    testWidgets('silent until turned on', (tester) async {
+      await _pumpApp(tester);
+      final rect = tester.getRect(_seat(_bottom));
+      await tester.tapAt(Offset(rect.left + rect.width / 4, rect.center.dy));
+      expect(_sounds.played, isEmpty);
+      await _settle(tester);
+    });
+
+    testWidgets('each half plays its sound, on life, damage and counters', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      settings.setSoundOn(true);
+      settings.setCounter(Counter.poison, true);
+      await tester.pump();
+      final rect = tester.getRect(_seat(_bottom));
+
+      await tester.tapAt(Offset(rect.left + rect.width / 4, rect.center.dy));
+      await tester.tapAt(Offset(rect.right - rect.width / 4, rect.center.dy));
+      expect(_sounds.played, [
+        settings.sound(SoundRole.minus),
+        settings.sound(SoundRole.plus),
+      ]);
+
+      // Adding commander damage is a + tap, so it plays the + sound.
+      await tester.tap(
+        find.descendant(
+          of: _seat(_bottom),
+          matching: find.byKey(const ValueKey('commander-damage')),
+        ),
+      );
+      await tester.pump();
+      final area = tester.getRect(
+        find.descendant(
+          of: _seat(_bottom),
+          matching: find.byKey(const ValueKey(('damage-from', _top))),
+        ),
+      );
+      await tester.tapAt(Offset(area.right - area.width / 4, area.center.dy));
+      expect(_sounds.played.last, settings.sound(SoundRole.plus));
+      await _settle(tester);
+    });
+
+    testWidgets('being knocked out plays its sound, once', (tester) async {
+      final settings = await _pumpApp(tester);
+      settings.setSoundOn(true);
+      await tester.pump();
+      final rect = tester.getRect(_seat(_bottom));
+      final minus = Offset(rect.left + rect.width / 4, rect.center.dy);
+
+      // Hold to drop from 40 to 0, then one more tap below 0.
+      final gesture = await tester.startGesture(minus);
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(milliseconds: 600));
+      }
+      await gesture.up();
+      await tester.tapAt(minus);
+      await tester.pump();
+      // Once, or not at all while there are no knocked-out sounds (None is
+      // never played).
+      final knockOut = settings.sound(SoundRole.knockedOut);
+      expect(
+        _sounds.played.where((s) => s == knockOut),
+        hasLength(knockOut == Sound.none ? 0 : 1),
+      );
+      expect(_sounds.played, isNot(contains(Sound.none)));
+      await _settle(tester);
+    });
+
+    testWidgets('choosing a sound in the Sound tab plays and keeps it', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sound').last);
+      await tester.pumpAndSettle();
+      // The choices are there but greyed out until sound is on.
+      final plusRow = find.byKey(const ValueKey(('sound', 'plus')));
+      DropdownMenu<Sound> plusMenu() => tester.widget<DropdownMenu<Sound>>(
+        find.descendant(
+          of: plusRow,
+          matching: find.byType(DropdownMenu<Sound>),
+        ),
+      );
+      expect(plusMenu().enabled, isFalse);
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(plusMenu().enabled, isTrue);
+
+      // Each row only offers its own kind of sound.
+      final offered = [for (final e in plusMenu().dropdownMenuEntries) e.value];
+      expect(offered, contains(Sound.phaserUp));
+      expect(offered, isNot(contains(Sound.hurt)));
+
+      await tester.tap(
+        find.descendant(
+          of: plusRow,
+          matching: find.byType(DropdownMenu<Sound>),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Phaser up').last);
+      await tester.pumpAndSettle();
+      expect(settings.sound(SoundRole.plus), Sound.phaserUp);
+      expect(_sounds.played, [Sound.phaserUp]);
     });
   });
 

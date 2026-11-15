@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../game/game.dart';
+import '../sound/sounds.dart';
 import 'counter_icon.dart';
 import 'crossed_swords.dart';
 import 'plus_minus_area.dart';
@@ -144,14 +145,46 @@ class _PlayerPanelState extends State<PlayerPanel> {
     _counterMode = null;
   });
 
-  void _toggleCounter(Counter counter) => setState(() {
-    _counterMode = _shownCounter?.counter == counter ? null : counter;
-    _damageMode = false;
-  });
+  void _toggleCounter(Counter counter) {
+    setState(() {
+      _counterMode = _shownCounter?.counter == counter ? null : counter;
+      _damageMode = false;
+    });
+    _restartCounterTimeout();
+  }
+
+  /// How long a counter stays shown without a tap before the panel goes
+  /// back to life, so it's never left showing the wrong number.
+  static const _counterTimeout = Duration(seconds: 5);
+  Timer? _counterTimer;
+
+  void _restartCounterTimeout() {
+    _counterTimer?.cancel();
+    if (_counterMode == null) return;
+    _counterTimer = Timer(_counterTimeout, () {
+      if (mounted) setState(() => _counterMode = null);
+    });
+  }
+
+  void _changeCounter(Counter counter, int delta) {
+    widget.onCounterChange?.call(counter, delta);
+    _restartCounterTimeout();
+  }
+
+  @override
+  void didUpdateWidget(PlayerPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Only at the moment it happens: not for a game reopened with someone
+    // already out, and not again while they stay out.
+    if (!oldWidget.knockedOut && widget.knockedOut) {
+      SoundScope.knockedOut(context);
+    }
+  }
 
   @override
   void dispose() {
     _deltaTimer?.cancel();
+    _counterTimer?.cancel();
     super.dispose();
   }
 
@@ -275,8 +308,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
       children: [
         PlusMinusArea(
           key: ValueKey(('counter-area', counter.name)),
-          onChange: (d) =>
-              widget.onCounterChange?.call(counter, d * counter.step),
+          onChange: (d) => _changeCounter(counter, d * counter.step),
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,

@@ -1,0 +1,9 @@
+All sounds here are Creative Commons Zero (CC0):
+http://creativecommons.org/publicdomain/zero/1.0/
+Renamed, otherwise unchanged. Credit isn't required, but thanks to:
+
+- The .wav files: Juhani Junkala, "The Essential Retro Video Game Sound
+  Effects Collection [512 sounds]",
+  https://opengameart.org/content/512-sound-effects-8-bit-style
+- The .ogg files: Kenney Vleugels (https://kenney.nl): Impact Sounds and
+  Digital Audio.
