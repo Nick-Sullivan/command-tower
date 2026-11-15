@@ -1,8 +1,9 @@
 # Play Store listing content
 
 Everything to paste into Play Console → Store presence → Main store listing.
-Still needed in this folder: `play_icon_512.png` (App icon),
-`feature_graphic.png` (Feature graphic, 1024x500), and at least 2 phone
+App icon: `play_icon_512.png` (regenerate with
+`flutter test tool/app_icon/generate_icons_test.dart`). Still needed in this
+folder: `feature_graphic.png` (Feature graphic, 1024x500), and at least 2 phone
 screenshots.
 
 ## App name (30 chars max)
