@@ -44,6 +44,8 @@ void main() {
           '"life": [40]}',
       '{"playerCount": 2, "layoutIndex": 0, "startingLife": 40, '
           '"life": [40, 40], "commanderDamage": [[0, 0]]}',
+      '{"playerCount": 2, "layoutIndex": 0, "startingLife": 40, '
+          '"life": [40, 40], "counters": {"poison": [1]}}',
     ]) {
       final game = (await _storeWith({'game': saved})).load();
       expect(game.life, [40, 40, 40, 40], reason: saved);
@@ -54,7 +56,8 @@ void main() {
     final game = Game(playerCount: 5, layoutIndex: 1, startingLife: 30)
       ..changeLife(0, -12)
       ..changeLife(4, 3)
-      ..changeCommanderDamage(to: 3, from: 1, delta: 7);
+      ..changeCommanderDamage(to: 3, from: 1, delta: 7)
+      ..changeCounter(Counter.commanderTax, 2, 4);
     final copy = Game.fromJson(jsonDecode(jsonEncode(game.toJson())))!;
     expect(copy.playerCount, 5);
     expect(copy.layoutIndex, 1);
@@ -62,6 +65,8 @@ void main() {
     expect(copy.life, [18, 30, 30, 23, 33]);
     expect(copy.commanderDamage(to: 3, from: 1), 7);
     expect(copy.commanderDamage(to: 1, from: 3), 0);
+    expect(copy.counter(Counter.commanderTax, 2), 4);
+    expect(copy.counter(Counter.poison, 2), 0);
   });
 
   test('a save from before commander damage loads with none', () async {
@@ -72,5 +77,6 @@ void main() {
     })).load();
     expect(game.life, [31, 40]);
     expect(game.commanderDamage(to: 0, from: 1), 0);
+    expect(game.counter(Counter.poison, 0), 0);
   });
 }

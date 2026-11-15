@@ -2,7 +2,10 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import 'counters.dart';
 import 'layouts.dart';
+
+export 'counters.dart';
 
 /// Commander damage from a single commander that knocks a player out.
 const lethalCommanderDamage = 21;
@@ -20,6 +23,10 @@ class Game extends ChangeNotifier {
   /// `_commanderDamage[victim][source]`: damage [victim] has taken from
   /// [source]'s commander. The diagonal is always 0.
   late List<List<int>> _commanderDamage;
+
+  /// Every counter's value per player, whether or not it's turned on, so
+  /// turning one off and on again mid-game loses nothing.
+  late Map<Counter, List<int>> _counters;
   int _generation = -1;
 
   int get playerCount => _playerCount;
@@ -35,12 +42,26 @@ class Game extends ChangeNotifier {
   int commanderDamage({required int to, required int from}) =>
       _commanderDamage[to][from];
 
-  /// Whether [player] would normally have lost: 0 or less life, or lethal
-  /// damage from one commander. Only shown, never enforced — some cards let
-  /// a player keep going.
+  int counter(Counter counter, int player) => _counters[counter]![player];
+
+  /// Whether [player] would normally have lost: 0 or less life, lethal
+  /// damage from one commander, or a lethal counter such as 10 poison. Only
+  /// shown, never enforced — some cards let a player keep going.
   bool isKnockedOut(int player) =>
       _life[player] <= 0 ||
-      _commanderDamage[player].any((d) => d >= lethalCommanderDamage);
+      _commanderDamage[player].any((d) => d >= lethalCommanderDamage) ||
+      Counter.values.any(
+        (c) => c.lethal != null && _counters[c]![player] >= c.lethal!,
+      );
+
+  /// Changes [player]'s [counter] by [delta], never below 0.
+  void changeCounter(Counter counter, int player, int delta) {
+    final values = _counters[counter]!;
+    final after = max(0, values[player] + delta);
+    if (after == values[player]) return;
+    values[player] = after;
+    notifyListeners();
+  }
 
   void changeLife(int player, int delta) {
     _life[player] += delta;
@@ -80,6 +101,7 @@ class Game extends ChangeNotifier {
     'startingLife': _startingLife,
     'life': _life,
     'commanderDamage': _commanderDamage,
+    'counters': {for (final c in Counter.values) c.name: _counters[c]},
   };
 
   /// Restores a saved game, or returns null if [json] isn't one this version
@@ -117,6 +139,18 @@ class Game extends ChangeNotifier {
         for (final row in damage) (row as List).cast<int>().toList(),
       ];
     }
+
+    // Likewise counters, or any counter added since the game was saved.
+    final counters = json['counters'];
+    if (counters != null) {
+      if (counters is! Map) return null;
+      for (final c in Counter.values) {
+        final values = counters[c.name];
+        if (values == null) continue;
+        if (!_isIntList(values, playerCount)) return null;
+        game._counters[c] = (values as List).cast<int>().toList();
+      }
+    }
     return game;
   }
 
@@ -133,6 +167,9 @@ class Game extends ChangeNotifier {
     _commanderDamage = [
       for (var i = 0; i < playerCount; i++) List.filled(playerCount, 0),
     ];
+    _counters = {
+      for (final c in Counter.values) c: List.filled(playerCount, 0),
+    };
     _generation++;
   }
 }

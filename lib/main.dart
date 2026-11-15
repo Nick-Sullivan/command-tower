@@ -4,6 +4,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'game/game.dart';
 import 'game/game_store.dart';
+import 'settings/app_settings.dart';
 import 'widgets/game_screen.dart';
 
 Future<void> main() async {
@@ -16,13 +17,15 @@ Future<void> main() async {
   final store = await GameStore.open();
   final game = store.load();
   store.autosave(game);
-  runApp(MyApp(game: game));
+  final settings = await AppSettings.open();
+  runApp(MyApp(game: game, settings: settings));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, required this.game});
+  const MyApp({super.key, required this.game, required this.settings});
 
   final Game game;
+  final AppSettings settings;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +41,9 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
       ),
-      home: Scaffold(body: GameScreen(game: game)),
+      home: Scaffold(
+        body: GameScreen(game: game, settings: settings),
+      ),
     );
   }
 }

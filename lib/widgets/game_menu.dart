@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../game/game.dart';
 import '../game/layouts.dart';
+import '../settings/app_settings.dart';
+import '../settings/tracking_settings.dart';
 import 'player_panel.dart';
 
-/// The small button where the panels meet; opens the game settings.
+/// The small button where the panels meet; opens the new game dialog.
 class GameMenuButton extends StatelessWidget {
-  const GameMenuButton({super.key, required this.game});
+  const GameMenuButton({super.key, required this.game, required this.settings});
 
   final Game game;
+  final AppSettings settings;
 
   @override
   Widget build(BuildContext context) {
@@ -17,104 +20,150 @@ class GameMenuButton extends StatelessWidget {
       shape: const CircleBorder(),
       child: IconButton(
         icon: const Icon(Icons.settings, color: Colors.white70),
-        onPressed: () => showModalBottomSheet<void>(
+        onPressed: () => showDialog<void>(
           context: context,
-          showDragHandle: true,
-          // Size to the content rather than the default cap of 9/16 height.
-          isScrollControlled: true,
-          builder: (_) => GameMenuSheet(game: game),
+          builder: (_) => GameMenuDialog(game: game, settings: settings),
         ),
       ),
     );
   }
 }
 
-/// Settings for the next game. Nothing changes until "New game", so a game in
-/// progress can't be reset by accident.
-class GameMenuSheet extends StatefulWidget {
-  const GameMenuSheet({super.key, required this.game});
+/// The quick settings: what you choose every game. Nothing here changes until
+/// Start, so a game in progress can't be reset by accident. Everything rarer
+/// is on the second tab.
+class GameMenuDialog extends StatefulWidget {
+  const GameMenuDialog({super.key, required this.game, required this.settings});
 
   final Game game;
+  final AppSettings settings;
 
   @override
-  State<GameMenuSheet> createState() => _GameMenuSheetState();
+  State<GameMenuDialog> createState() => _GameMenuDialogState();
 }
 
-class _GameMenuSheetState extends State<GameMenuSheet> {
+class _GameMenuDialogState extends State<GameMenuDialog>
+    with SingleTickerProviderStateMixin {
   late int _players = widget.game.playerCount;
   late int _layout = widget.game.layoutIndex;
   late int _life = widget.game.startingLife;
+
+  late final _tabs = TabController(length: 2, vsync: this)
+    ..addListener(() => setState(() {}));
+  bool get _onNewGame => _tabs.index == 0;
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  void _start() {
+    widget.game.newGame(
+      playerCount: _players,
+      layoutIndex: _layout,
+      startingLife: _life,
+    );
+    Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
     final titleStyle = Theme.of(context).textTheme.titleSmall;
     final layouts = tableLayouts[_players]!;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Players', style: titleStyle),
-            const SizedBox(height: 8),
-            SegmentedButton<int>(
-              showSelectedIcon: false,
-              segments: [
-                for (var n = minPlayers; n <= maxPlayers; n++)
-                  ButtonSegment(value: n, label: Text('$n')),
-              ],
-              selected: {_players},
-              onSelectionChanged: (s) => setState(() {
-                _players = s.first;
-                _layout = 0;
-              }),
-            ),
-            const SizedBox(height: 24),
-            Text('Layout', style: titleStyle),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                for (var i = 0; i < layouts.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: LayoutThumbnail(
-                      key: ValueKey(('layout', i)),
-                      layout: layouts[i],
-                      selected: i == _layout,
-                      onTap: () => setState(() => _layout = i),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Text('Starting life', style: titleStyle),
-            const SizedBox(height: 8),
-            SegmentedButton<int>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: 20, label: Text('20')),
-                ButtonSegment(value: 30, label: Text('30')),
-                ButtonSegment(value: 40, label: Text('40')),
-              ],
-              selected: {_life},
-              onSelectionChanged: (s) => setState(() => _life = s.first),
-            ),
-            const SizedBox(height: 32),
-            FilledButton(
-              onPressed: () {
-                widget.game.newGame(
-                  playerCount: _players,
-                  layoutIndex: _layout,
-                  startingLife: _life,
-                );
-                Navigator.pop(context);
-              },
-              child: const Text('New game'),
-            ),
-          ],
+    return AlertDialog(
+      titlePadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      title: TabBar(
+        controller: _tabs,
+        tabs: const [
+          Tab(text: 'New game'),
+          Tab(text: 'Tracking'),
+        ],
+      ),
+      // New game waits for Start; tracking applies as it's chosen, so that
+      // tab only needs closing.
+      actions: _onNewGame
+          ? [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(onPressed: _start, child: const Text('Start')),
+            ]
+          : [
+              FilledButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Done'),
+              ),
+            ],
+      // Both tabs are laid out, and the dialog takes the size of the larger,
+      // so switching tabs never resizes or moves it.
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: IndexedStack(
+            index: _tabs.index,
+            alignment: AlignmentDirectional.topStart,
+            children: [
+              _newGame(titleStyle, layouts),
+              TrackingSettings(settings: widget.settings),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _newGame(TextStyle? titleStyle, List<TableLayout> layouts) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Players', style: titleStyle),
+        const SizedBox(height: 8),
+        SegmentedButton<int>(
+          showSelectedIcon: false,
+          segments: [
+            for (var n = minPlayers; n <= maxPlayers; n++)
+              ButtonSegment(value: n, label: Text('$n')),
+          ],
+          selected: {_players},
+          onSelectionChanged: (s) => setState(() {
+            _players = s.first;
+            _layout = 0;
+          }),
+        ),
+        const SizedBox(height: 24),
+        Text('Layout', style: titleStyle),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (var i = 0; i < layouts.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: LayoutThumbnail(
+                  key: ValueKey(('layout', i)),
+                  layout: layouts[i],
+                  selected: i == _layout,
+                  onTap: () => setState(() => _layout = i),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Text('Starting life', style: titleStyle),
+        const SizedBox(height: 8),
+        SegmentedButton<int>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: 20, label: Text('20')),
+            ButtonSegment(value: 30, label: Text('30')),
+            ButtonSegment(value: 40, label: Text('40')),
+          ],
+          selected: {_life},
+          onSelectionChanged: (s) => setState(() => _life = s.first),
+        ),
+      ],
     );
   }
 }

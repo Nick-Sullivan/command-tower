@@ -65,12 +65,38 @@ void main() {
     expect(game.isKnockedOut(1), isTrue);
   });
 
+  test('counters change per player and never go below 0', () {
+    final game = Game();
+    game.changeCounter(Counter.poison, 1, 3);
+    game.changeCounter(Counter.energy, 1, 2);
+    expect(game.counter(Counter.poison, 1), 3);
+    expect(game.counter(Counter.energy, 1), 2);
+    expect(game.counter(Counter.poison, 0), 0);
+    game.changeCounter(Counter.poison, 1, -5);
+    expect(game.counter(Counter.poison, 1), 0);
+    // Counters never touch life.
+    expect(game.life, [40, 40, 40, 40]);
+  });
+
+  test('10 poison knocks a player out', () {
+    final game = Game();
+    game.changeCounter(Counter.poison, 2, 9);
+    expect(game.isKnockedOut(2), isFalse);
+    game.changeCounter(Counter.poison, 2, 1);
+    expect(game.isKnockedOut(2), isTrue);
+    // Other counters have no lethal value.
+    game.changeCounter(Counter.experience, 3, 50);
+    expect(game.isKnockedOut(3), isFalse);
+  });
+
   test('a new game resets life and moves to the next generation', () {
     final game = Game();
     final before = game.generation;
     game.changeLife(0, -3);
     game.changeCommanderDamage(to: 0, from: 1, delta: 5);
+    game.changeCounter(Counter.poison, 0, 4);
     game.newGame(playerCount: 3, layoutIndex: 1, startingLife: 20);
+    expect(game.counter(Counter.poison, 0), 0);
     expect(game.life, [20, 20, 20]);
     expect(game.commanderDamage(to: 0, from: 1), 0);
     expect(game.layoutIndex, 1);

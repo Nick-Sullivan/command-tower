@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../game/game.dart';
 import '../game/layouts.dart';
+import '../settings/app_settings.dart';
 import 'game_menu.dart';
 import 'player_panel.dart';
 
 /// The table: every player's panel facing their seat, and the menu button
 /// where the panels meet.
 class GameScreen extends StatelessWidget {
-  const GameScreen({super.key, required this.game});
+  const GameScreen({super.key, required this.game, required this.settings});
 
   final Game game;
+  final AppSettings settings;
 
   static const _gap = 6.0;
   static const _menuButtonSize = 48.0;
@@ -21,9 +23,10 @@ class GameScreen extends StatelessWidget {
       color: Colors.black,
       child: SafeArea(
         child: ListenableBuilder(
-          listenable: game,
+          listenable: Listenable.merge([game, settings]),
           builder: (context, _) {
             final seats = game.layout.seats;
+            final counters = settings.counters;
             return LayoutBuilder(
               builder: (context, constraints) {
                 final size = constraints.biggest;
@@ -57,6 +60,13 @@ class GameScreen extends StatelessWidget {
                                   damage: game.commanderDamage(to: i, from: o),
                                 ),
                             ],
+                            commanderDamage: settings.commanderDamage,
+                            counters: [
+                              for (final c in counters)
+                                CounterValue(c, game.counter(c, i)),
+                            ],
+                            onCounterChange: (c, delta) =>
+                                game.changeCounter(c, i, delta),
                             onLifeChange: (delta) => game.changeLife(i, delta),
                             onDamageChange: (from, delta) =>
                                 game.changeCommanderDamage(
@@ -72,7 +82,7 @@ class GameScreen extends StatelessWidget {
                       top: (size.height - _menuButtonSize) / 2,
                       width: _menuButtonSize,
                       height: _menuButtonSize,
-                      child: GameMenuButton(game: game),
+                      child: GameMenuButton(game: game, settings: settings),
                     ),
                   ],
                 );

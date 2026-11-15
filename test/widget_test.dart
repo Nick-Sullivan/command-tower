@@ -1,11 +1,13 @@
 import 'package:command_tower/game/game.dart';
 import 'package:command_tower/main.dart';
+import 'package:command_tower/settings/app_settings.dart';
 import 'package:command_tower/widgets/player_panel.dart';
 import 'package:command_tower/widgets/skull.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Seats in the default 4-player layout, clockwise from the top end.
 const _top = 0, _right = 1, _bottom = 2;
@@ -15,13 +17,17 @@ Finder _seat(int i) => find.byKey(ValueKey(('seat', i)));
 Finder _textInSeat(int i, String text) =>
     find.descendant(of: _seat(i), matching: find.text(text));
 
-Future<void> _pumpApp(WidgetTester tester) async {
+Future<AppSettings> _pumpApp(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2220);
   tester.view.devicePixelRatio = 2.75;
   addTearDown(tester.view.reset);
   final game = Game();
   addTearDown(game.dispose);
-  await tester.pumpWidget(MyApp(game: game));
+  SharedPreferences.setMockInitialValues({});
+  final settings = await AppSettings.open();
+  addTearDown(settings.dispose);
+  await tester.pumpWidget(MyApp(game: game, settings: settings));
+  return settings;
 }
 
 /// Lets the running delta fade so no timers are left pending.
@@ -328,6 +334,180 @@ void main() {
     });
   });
 
+  group('counters', () {
+    Finder counterButton(int seat, Counter c) => find.descendant(
+      of: _seat(seat),
+      matching: find.byKey(ValueKey(('counter', c.name))),
+    );
+    Finder counterArea(int seat, Counter c) => find.descendant(
+      of: _seat(seat),
+      matching: find.byKey(ValueKey(('counter-area', c.name))),
+    );
+
+    testWidgets('turned on from More settings, they appear on every panel', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+      expect(counterButton(_bottom, Counter.poison), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tracking'));
+      await tester.pumpAndSettle();
+      // Counters apply as they're chosen, so there's nothing to Start.
+      expect(find.text('Start'), findsNothing);
+      await tester.tap(find.text('Poison'));
+      await tester.pump();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      for (var seat = 0; seat < 4; seat++) {
+        expect(counterButton(seat, Counter.poison), findsOneWidget);
+      }
+      expect(counterButton(_bottom, Counter.energy), findsNothing);
+    });
+
+    testWidgets('a counter button shows it big, with − and + halves', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      settings.setCounter(Counter.poison, true);
+      settings.setCounter(Counter.commanderTax, true);
+      await tester.pump();
+
+      await tester.tap(counterButton(_bottom, Counter.poison));
+      await tester.pump();
+      final area = tester.getRect(counterArea(_bottom, Counter.poison));
+      final plus = Offset(area.right - area.width / 4, area.center.dy);
+      await tester.tapAt(plus);
+      await tester.tapAt(plus);
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: counterArea(_bottom, Counter.poison),
+          matching: find.text('2'),
+        ),
+        findsOneWidget,
+      );
+      // Life is untouched, and still shown beside the buttons.
+      expect(_textInSeat(_bottom, '40'), findsOneWidget);
+
+      // Back to life, with the value on the button.
+      await tester.tap(counterButton(_bottom, Counter.poison));
+      await tester.pump();
+      expect(counterArea(_bottom, Counter.poison), findsNothing);
+      expect(
+        find.descendant(
+          of: counterButton(_bottom, Counter.poison),
+          matching: find.text('2'),
+        ),
+        findsOneWidget,
+      );
+
+      // Commander tax goes up 2 per tap.
+      await tester.tap(counterButton(_bottom, Counter.commanderTax));
+      await tester.pump();
+      final tax = tester.getRect(counterArea(_bottom, Counter.commanderTax));
+      await tester.tapAt(Offset(tax.right - tax.width / 4, tax.center.dy));
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: counterArea(_bottom, Counter.commanderTax),
+          matching: find.text('2'),
+        ),
+        findsOneWidget,
+      );
+
+      // The swords switch straight from a counter to commander damage.
+      await tester.tap(
+        find.descendant(
+          of: _seat(_bottom),
+          matching: find.byKey(const ValueKey('commander-damage')),
+        ),
+      );
+      await tester.pump();
+      expect(counterArea(_bottom, Counter.commanderTax), findsNothing);
+      expect(
+        find.descendant(
+          of: _seat(_bottom),
+          matching: find.byKey(const ValueKey(('damage-from', _top))),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the buttons stay centred in every view', (tester) async {
+      final settings = await _pumpApp(tester);
+      final panel = tester.getRect(_seat(_bottom));
+      final swords = find.descendant(
+        of: _seat(_bottom),
+        matching: find.byKey(const ValueKey('commander-damage')),
+      );
+      expect(tester.getCenter(swords).dx, closeTo(panel.center.dx, 1));
+
+      // With two counters, the swords + tax + poison group is centred.
+      settings.setCounter(Counter.poison, true);
+      settings.setCounter(Counter.commanderTax, true);
+      await tester.pump();
+      double groupCentre() =>
+          (tester.getRect(swords).left +
+              tester.getRect(counterButton(_bottom, Counter.poison)).right) /
+          2;
+      expect(groupCentre(), closeTo(panel.center.dx, 1));
+
+      // Still centred with the life total showing beside them.
+      await tester.tap(counterButton(_bottom, Counter.poison));
+      await tester.pump();
+      expect(groupCentre(), closeTo(panel.center.dx, 1));
+    });
+
+    testWidgets('commander damage can be turned off and on from Tracking', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      final swords = find.descendant(
+        of: _seat(_bottom),
+        matching: find.byKey(const ValueKey('commander-damage')),
+      );
+      expect(settings.commanderDamage, isTrue);
+      await tester.tap(swords);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tracking'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Commander damage'));
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      // The swords are gone, and the panel that was showing damage is back
+      // on life.
+      expect(swords, findsNothing);
+      expect(_textInSeat(_bottom, '40'), findsOneWidget);
+
+      settings.setCommanderDamage(true);
+      await tester.pump();
+      expect(swords, findsOneWidget);
+    });
+
+    testWidgets('turning a counter off while it is shown goes back to life', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      settings.setCounter(Counter.energy, true);
+      await tester.pump();
+      await tester.tap(counterButton(_bottom, Counter.energy));
+      await tester.pump();
+      expect(counterArea(_bottom, Counter.energy), findsOneWidget);
+
+      settings.setCounter(Counter.energy, false);
+      await tester.pump();
+      expect(counterArea(_bottom, Counter.energy), findsNothing);
+      expect(_textInSeat(_bottom, '40'), findsOneWidget);
+    });
+  });
+
   testWidgets('a new game applies the chosen players and life', (tester) async {
     await _pumpApp(tester);
     await tester.tap(find.byIcon(Icons.settings));
@@ -336,11 +516,24 @@ void main() {
     await tester.tap(find.text('6'));
     await tester.tap(find.text('20'));
     await tester.tap(find.byKey(const ValueKey(('layout', 1))));
-    await tester.tap(find.text('New game'));
+    await tester.tap(find.text('Start'));
     await tester.pumpAndSettle();
 
     for (var i = 0; i < 6; i++) {
       expect(_textInSeat(i, '20'), findsOneWidget);
     }
+  });
+
+  testWidgets('cancel leaves the game as it was', (tester) async {
+    await _pumpApp(tester);
+    await tester.tap(find.byIcon(Icons.settings));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('6'));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Start'), findsNothing);
+    expect(_seat(4), findsNothing);
+    expect(_textInSeat(_bottom, '40'), findsOneWidget);
   });
 }
