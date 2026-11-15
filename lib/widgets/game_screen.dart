@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../game/game.dart';
+import '../game/layouts.dart';
 import 'game_menu.dart';
 import 'player_panel.dart';
 
@@ -43,7 +44,25 @@ class GameScreen extends StatelessWidget {
                             key: ValueKey((game.generation, i)),
                             life: game.life[i],
                             color: playerColors[i],
-                            onChange: (delta) => game.changeLife(i, delta),
+                            opponents: [
+                              for (final o in othersLeftToRight(
+                                game.layout,
+                                i,
+                                size,
+                              ))
+                                Opponent(
+                                  player: o,
+                                  color: playerColors[o],
+                                  damage: game.commanderDamage(to: i, from: o),
+                                ),
+                            ],
+                            onLifeChange: (delta) => game.changeLife(i, delta),
+                            onDamageChange: (from, delta) =>
+                                game.changeCommanderDamage(
+                                  to: i,
+                                  from: from,
+                                  delta: delta,
+                                ),
                           ),
                         ),
                       ),

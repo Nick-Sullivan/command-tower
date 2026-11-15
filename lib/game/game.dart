@@ -1,6 +1,11 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 import 'layouts.dart';
+
+/// Commander damage from a single commander that knocks a player out.
+const lethalCommanderDamage = 21;
 
 class Game extends ChangeNotifier {
   Game({int playerCount = 4, int layoutIndex = 0, int startingLife = 40}) {
@@ -11,6 +16,10 @@ class Game extends ChangeNotifier {
   late int _layoutIndex;
   late int _startingLife;
   late List<int> _life;
+
+  /// `_commanderDamage[victim][source]`: damage [victim] has taken from
+  /// [source]'s commander. The diagonal is always 0.
+  late List<List<int>> _commanderDamage;
   int _generation = -1;
 
   int get playerCount => _playerCount;
@@ -23,9 +32,30 @@ class Game extends ChangeNotifier {
 
   TableLayout get layout => tableLayouts[_playerCount]![_layoutIndex];
 
+  int commanderDamage({required int to, required int from}) =>
+      _commanderDamage[to][from];
+
   void changeLife(int player, int delta) {
     _life[player] += delta;
     notifyListeners();
+  }
+
+  /// Changes the damage [to] has taken from [from]'s commander, never below 0.
+  /// Life moves the opposite way by the same amount, so damage is entered
+  /// once. Returns how much the damage actually changed.
+  int changeCommanderDamage({
+    required int to,
+    required int from,
+    required int delta,
+  }) {
+    assert(to != from);
+    final before = _commanderDamage[to][from];
+    final after = max(0, before + delta);
+    if (after == before) return 0;
+    _commanderDamage[to][from] = after;
+    _life[to] -= after - before;
+    notifyListeners();
+    return after - before;
   }
 
   void newGame({
@@ -42,6 +72,7 @@ class Game extends ChangeNotifier {
     'layoutIndex': _layoutIndex,
     'startingLife': _startingLife,
     'life': _life,
+    'commanderDamage': _commanderDamage,
   };
 
   /// Restores a saved game, or returns null if [json] isn't one this version
@@ -54,21 +85,36 @@ class Game extends ChangeNotifier {
     if (playerCount is! int ||
         layoutIndex is! int ||
         startingLife is! int ||
-        life is! List ||
-        life.length != playerCount ||
-        life.any((l) => l is! int)) {
+        !_isIntList(life, playerCount)) {
       return null;
     }
     final layouts = tableLayouts[playerCount];
     if (layouts == null || layoutIndex < 0 || layoutIndex >= layouts.length) {
       return null;
     }
-    return Game(
+    final game = Game(
       playerCount: playerCount,
       layoutIndex: layoutIndex,
       startingLife: startingLife,
-    ).._life = life.cast<int>().toList();
+    ).._life = (life as List).cast<int>().toList();
+
+    // Saves from before commander damage existed simply have none.
+    final damage = json['commanderDamage'];
+    if (damage != null) {
+      if (damage is! List ||
+          damage.length != playerCount ||
+          damage.any((row) => !_isIntList(row, playerCount))) {
+        return null;
+      }
+      game._commanderDamage = [
+        for (final row in damage) (row as List).cast<int>().toList(),
+      ];
+    }
+    return game;
   }
+
+  static bool _isIntList(Object? value, int length) =>
+      value is List && value.length == length && value.every((v) => v is int);
 
   void _start(int playerCount, int layoutIndex, int startingLife) {
     assert(tableLayouts.containsKey(playerCount));
@@ -77,6 +123,9 @@ class Game extends ChangeNotifier {
     _layoutIndex = layoutIndex;
     _startingLife = startingLife;
     _life = List.filled(playerCount, startingLife);
+    _commanderDamage = [
+      for (var i = 0; i < playerCount; i++) List.filled(playerCount, 0),
+    ];
     _generation++;
   }
 }

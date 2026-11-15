@@ -1,5 +1,7 @@
 import 'package:command_tower/game/game.dart';
 import 'package:command_tower/main.dart';
+import 'package:command_tower/widgets/player_panel.dart';
+import 'package:command_tower/widgets/skull.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -83,8 +85,8 @@ void main() {
     await tester.tapAt(Offset(rect.left + rect.width / 4, rect.center.dy));
     await tester.tapAt(Offset(rect.right - rect.width / 4, rect.center.dy));
     expect(haptics, [
-      'HapticFeedbackType.selectionClick',
-      'HapticFeedbackType.selectionClick',
+      'HapticFeedbackType.lightImpact',
+      'HapticFeedbackType.lightImpact',
     ]);
     await _settle(tester);
   });
@@ -130,6 +132,135 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     expect(_textInSeat(_bottom, '20'), findsOneWidget);
     await _settle(tester);
+  });
+
+  group('commander damage', () {
+    Finder swords(int seat) => find.descendant(
+      of: _seat(seat),
+      matching: find.byKey(const ValueKey('commander-damage')),
+    );
+    Finder damageFrom(int seat, int from) => find.descendant(
+      of: _seat(seat),
+      matching: find.byKey(ValueKey(('damage-from', from))),
+    );
+
+    testWidgets('the swords open damage mode with one area per opponent, '
+        'and close it again', (tester) async {
+      await _pumpApp(tester);
+      expect(damageFrom(_bottom, _top), findsNothing);
+
+      await tester.tap(swords(_bottom));
+      await tester.pump();
+      for (final from in [0, 1, 3]) {
+        expect(damageFrom(_bottom, from), findsOneWidget);
+      }
+      expect(damageFrom(_bottom, _bottom), findsNothing);
+      // Other panels are unaffected.
+      expect(damageFrom(_top, _bottom), findsNothing);
+
+      await tester.tap(swords(_bottom));
+      await tester.pump();
+      expect(damageFrom(_bottom, _top), findsNothing);
+      expect(_textInSeat(_bottom, '40'), findsOneWidget);
+    });
+
+    testWidgets('lethal damage shows a skull and keeps the colour', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+      await tester.tap(swords(_bottom));
+      await tester.pump();
+      final area = tester.getRect(damageFrom(_bottom, _top));
+      final plus = Offset(area.right - area.width / 4, area.center.dy);
+      Finder skull() => find.descendant(
+        of: damageFrom(_bottom, _top),
+        matching: find.byType(Skull),
+      );
+
+      for (var i = 0; i < 20; i++) {
+        await tester.tapAt(plus);
+      }
+      await tester.pump();
+      expect(skull(), findsNothing);
+
+      await tester.tapAt(plus);
+      await tester.pump();
+      expect(skull(), findsOneWidget);
+      final material = tester.widget<Material>(
+        find
+            .descendant(
+              of: damageFrom(_bottom, _top),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      expect(material.color, playerColors[_top]);
+      await _settle(tester);
+    });
+
+    testWidgets('opponent areas sit where those players sit', (tester) async {
+      await _pumpApp(tester);
+      await tester.tap(swords(_bottom));
+      await tester.pump();
+      // From the bottom end: left side (3), top end (0), right side (1).
+      final xs = [
+        for (final from in [3, 0, 1])
+          tester.getCenter(damageFrom(_bottom, from)).dx,
+      ];
+      expect(xs[0], lessThan(xs[1]));
+      expect(xs[1], lessThan(xs[2]));
+    });
+
+    testWidgets('adding damage takes it off life, and minus gives it back', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+      await tester.tap(swords(_bottom));
+      await tester.pump();
+      final area = tester.getRect(damageFrom(_bottom, _top));
+      final plus = Offset(area.right - area.width / 4, area.center.dy);
+      final minus = Offset(area.left + area.width / 4, area.center.dy);
+
+      for (var i = 0; i < 3; i++) {
+        await tester.tapAt(plus);
+      }
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: damageFrom(_bottom, _top),
+          matching: find.text('3'),
+        ),
+        findsOneWidget,
+      );
+      expect(_textInSeat(_bottom, '37'), findsOneWidget);
+
+      await tester.tapAt(minus);
+      await tester.pump();
+      expect(_textInSeat(_bottom, '38'), findsOneWidget);
+
+      // Below zero does nothing.
+      for (var i = 0; i < 4; i++) {
+        await tester.tapAt(minus);
+      }
+      await tester.pump();
+      expect(_textInSeat(_bottom, '40'), findsOneWidget);
+
+      // Damage is still there after closing and reopening.
+      await tester.tapAt(plus);
+      await tester.tap(swords(_bottom));
+      await tester.pump();
+      expect(_textInSeat(_bottom, '39'), findsOneWidget);
+      await tester.tap(swords(_bottom));
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: damageFrom(_bottom, _top),
+          matching: find.text('1'),
+        ),
+        findsOneWidget,
+      );
+      await _settle(tester);
+    });
   });
 
   testWidgets('a new game applies the chosen players and life', (tester) async {

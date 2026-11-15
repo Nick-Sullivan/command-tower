@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/painting.dart';
 
 /// Which edge of the phone a player sits at, as clockwise quarter turns that
@@ -22,6 +24,35 @@ class TableLayout {
   const TableLayout(this.seats);
 
   final List<Seat> seats;
+}
+
+/// The other seats in [layout], ordered left to right as the player at [seat]
+/// sees them across the table on a screen of [screen] size.
+List<int> othersLeftToRight(TableLayout layout, int seat, Size screen) {
+  Offset centre(int i) {
+    final r = layout.seats[i].rect;
+    return Offset(r.center.dx * screen.width, r.center.dy * screen.height);
+  }
+
+  final me = centre(seat);
+  final turns = layout.seats[seat].quarterTurns;
+  double angle(int other) {
+    var v = centre(other) - me;
+    // Undo the seat's clockwise quarter turns to see v from the player's
+    // point of view, where forward is up (-y).
+    for (var t = 0; t < turns; t++) {
+      v = Offset(v.dy, -v.dx);
+    }
+    // 0 is straight ahead; negative is to their left, positive to their right.
+    return atan2(v.dx, -v.dy);
+  }
+
+  final others = [
+    for (var i = 0; i < layout.seats.length; i++)
+      if (i != seat) i,
+  ];
+  others.sort((a, b) => angle(a).compareTo(angle(b)));
+  return others;
 }
 
 const minPlayers = 2;

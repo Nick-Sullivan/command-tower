@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:command_tower/game/game.dart';
 import 'package:command_tower/game/game_store.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,6 +42,8 @@ void main() {
           '"life": [40, 40]}',
       '{"playerCount": 2, "layoutIndex": 0, "startingLife": 40, '
           '"life": [40]}',
+      '{"playerCount": 2, "layoutIndex": 0, "startingLife": 40, '
+          '"life": [40, 40], "commanderDamage": [[0, 0]]}',
     ]) {
       final game = (await _storeWith({'game': saved})).load();
       expect(game.life, [40, 40, 40, 40], reason: saved);
@@ -49,11 +53,24 @@ void main() {
   test('round-trips through JSON', () {
     final game = Game(playerCount: 5, layoutIndex: 1, startingLife: 30)
       ..changeLife(0, -12)
-      ..changeLife(4, 3);
-    final copy = Game.fromJson(game.toJson())!;
+      ..changeLife(4, 3)
+      ..changeCommanderDamage(to: 3, from: 1, delta: 7);
+    final copy = Game.fromJson(jsonDecode(jsonEncode(game.toJson())))!;
     expect(copy.playerCount, 5);
     expect(copy.layoutIndex, 1);
     expect(copy.startingLife, 30);
-    expect(copy.life, [18, 30, 30, 30, 33]);
+    expect(copy.life, [18, 30, 30, 23, 33]);
+    expect(copy.commanderDamage(to: 3, from: 1), 7);
+    expect(copy.commanderDamage(to: 1, from: 3), 0);
+  });
+
+  test('a save from before commander damage loads with none', () async {
+    final game = (await _storeWith({
+      'game':
+          '{"playerCount": 2, "layoutIndex": 0, "startingLife": 40, '
+          '"life": [31, 40]}',
+    })).load();
+    expect(game.life, [31, 40]);
+    expect(game.commanderDamage(to: 0, from: 1), 0);
   });
 }
