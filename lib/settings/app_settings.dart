@@ -78,6 +78,18 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  static const _turnTimerKey = 'turnTimer';
+
+  /// Whether the table tracks whose turn it is and for how long. Off by
+  /// default.
+  bool get turnTimer => _prefs.getBool(_turnTimerKey) ?? false;
+
+  void setTurnTimer(bool on) {
+    if (on == turnTimer) return;
+    _prefs.setBool(_turnTimerKey, on);
+    notifyListeners();
+  }
+
   static const _randomStartingPlayerKey = 'randomStartingPlayer';
 
   /// Whether Start picks a random player to go first. Off by default.

@@ -29,6 +29,14 @@ class GameScreen extends StatelessWidget {
           builder: (context, _) {
             final seats = game.layout.seats;
             final counters = settings.counters;
+            // With the turn timer on, turns start as soon as the table shows:
+            // straight away, or when a new game begins.
+            final turns = settings.turnTimer;
+            if (turns && game.turnPlayer == null) {
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => game.startTurns(),
+              );
+            }
             return LayoutBuilder(
               builder: (context, constraints) {
                 final size = constraints.biggest;
@@ -75,6 +83,12 @@ class GameScreen extends StatelessWidget {
                                   ),
                               ],
                               commanderDamage: settings.commanderDamage,
+                              turnElapsed: turns && game.turnPlayer == i
+                                  ? () => game.turnElapsed
+                                  : null,
+                              onEndTurn: turns && game.turnPlayer == i
+                                  ? game.endTurn
+                                  : null,
                               counters: [
                                 for (final c in counters)
                                   CounterValue(c, game.counter(c, i)),

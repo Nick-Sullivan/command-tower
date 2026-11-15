@@ -1,4 +1,6 @@
+import 'package:clock/clock.dart';
 import 'package:command_tower/game/game.dart';
+import 'package:command_tower/widgets/turn_clock.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -128,6 +130,104 @@ void main() {
     );
     game.newGame(playerCount: 3, layoutIndex: 0, startingLife: 40);
     expect(game.startingPlayer, isNull);
+  });
+
+  test('turn time reads as m:ss, or h:mm:ss past an hour', () {
+    expect(TurnClock.format(const Duration(seconds: 7)), '0:07');
+    expect(TurnClock.format(const Duration(minutes: 12, seconds: 30)), '12:30');
+    expect(
+      TurnClock.format(const Duration(hours: 1, minutes: 2, seconds: 5)),
+      '1:02:05',
+    );
+  });
+
+  group('turns', () {
+    test('start with the starting player, or the first seat', () {
+      final game = Game();
+      game.startTurns();
+      expect(game.turnPlayer, 0);
+      game.newGame(
+        playerCount: 4,
+        layoutIndex: 0,
+        startingLife: 40,
+        startingPlayer: 2,
+      );
+      // A new game stops turns until they're started again.
+      expect(game.turnPlayer, isNull);
+      game.startTurns();
+      expect(game.turnPlayer, 2);
+    });
+
+    test('pass clockwise, skipping knocked-out players', () {
+      final game = Game()..startTurns();
+      game.endTurn();
+      expect(game.turnPlayer, 1);
+      game.changeLife(2, -40);
+      game.endTurn();
+      expect(game.turnPlayer, 3);
+      game.endTurn();
+      expect(game.turnPlayer, 0);
+    });
+
+    test('each turn restarts the time', () {
+      withClock(Clock.fixed(DateTime(2026, 1, 1, 20)), () {
+        final game = Game()..startTurns();
+        expect(game.turnStarted, DateTime(2026, 1, 1, 20));
+      });
+      withClock(Clock.fixed(DateTime(2026, 1, 1, 20, 3)), () {
+        final game = Game()..startTurns();
+        game.endTurn();
+        expect(game.turnStarted, DateTime(2026, 1, 1, 20, 3));
+      });
+    });
+
+    test('pausing stops the turn time until it resumes', () {
+      var now = DateTime(2026, 1, 1, 20);
+      withClock(Clock(() => now), () {
+        final game = Game()..startTurns();
+        now = now.add(const Duration(seconds: 30));
+        game.pauseTurn();
+        now = now.add(const Duration(minutes: 5));
+        expect(game.turnElapsed, const Duration(seconds: 30));
+        game.resumeTurn();
+        now = now.add(const Duration(seconds: 10));
+        expect(game.turnElapsed, const Duration(seconds: 40));
+      });
+    });
+
+    test('counts each player\'s turns and their time', () {
+      var now = DateTime(2026, 1, 1, 20);
+      withClock(Clock(() => now), () {
+        final game = Game(playerCount: 2, layoutIndex: 0)..startTurns();
+        now = now.add(const Duration(seconds: 30));
+        game.endTurn();
+        now = now.add(const Duration(seconds: 50));
+        game.endTurn();
+        now = now.add(const Duration(seconds: 10));
+        // Player 0: 30s done, plus 10s in progress; player 1: one of 50s.
+        expect(game.turnCount(0), 2);
+        expect(game.turnTotal(0), const Duration(seconds: 40));
+        expect(game.turnCount(1), 1);
+        expect(game.turnTotal(1), const Duration(seconds: 50));
+
+        final copy = Game.fromJson(game.toJson())!;
+        expect(copy.turnCount(1), 1);
+        expect(copy.turnTotal(1), const Duration(seconds: 50));
+
+        game.newGame(playerCount: 2, layoutIndex: 0, startingLife: 40);
+        expect(game.turnCount(0), 0);
+        expect(game.turnTotal(1), Duration.zero);
+      });
+    });
+
+    test('the turn in progress is saved with the game', () {
+      final game = Game()
+        ..startTurns()
+        ..endTurn();
+      final copy = Game.fromJson(game.toJson())!;
+      expect(copy.turnPlayer, 1);
+      expect(copy.turnStarted, game.turnStarted!.copyWith(microsecond: 0));
+    });
   });
 
   test('a new game resets life and moves to the next generation', () {

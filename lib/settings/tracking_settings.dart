@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 
-import '../game/counters.dart';
 import '../game/dice.dart';
+import '../game/game.dart';
 import '../widgets/counter_icon.dart';
 import '../widgets/crossed_swords.dart';
+import '../widgets/turn_stats.dart';
 import 'app_settings.dart';
 
-/// A chip per thing on the table, alphabetically; selected ones appear on
-/// every panel (or, for dice, as a button by the ⚙). Changes apply straight
-/// away and never reset the game.
+/// The turn timer first, with each player's turn times; then a chip per
+/// other thing on the table, alphabetically. Selected ones appear on every
+/// panel (or, for dice, as a button by the ⚙). Changes apply straight away
+/// and never reset the game.
 class TrackingSettings extends StatelessWidget {
-  const TrackingSettings({super.key, required this.settings});
+  const TrackingSettings({
+    super.key,
+    required this.settings,
+    required this.game,
+  });
 
   final AppSettings settings;
+  final Game game;
 
   @override
   Widget build(BuildContext context) {
@@ -49,12 +56,56 @@ class TrackingSettings extends StatelessWidget {
               ),
             ),
         ]..sort((a, b) => a.$1.compareTo(b.$1));
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [for (final (_, chip) in chips) chip],
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _TurnTimer(settings: settings, game: game),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [for (final (_, chip) in chips) chip],
+            ),
+          ],
         );
       },
+    );
+  }
+}
+
+/// The Turn timer chip. Once it's on, it opens out into a box holding the
+/// chip and, right under it, each player's turn times.
+class _TurnTimer extends StatelessWidget {
+  const _TurnTimer({required this.settings, required this.game});
+
+  final AppSettings settings;
+  final Game game;
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = FilterChip(
+      avatar: const Icon(Icons.timer, size: 18),
+      showCheckmark: false,
+      label: const Text('Turn timer'),
+      selected: settings.turnTimer,
+      onSelected: settings.setTurnTimer,
+    );
+    if (!settings.turnTimer) return chip;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          chip,
+          TurnStats(game: game),
+        ],
+      ),
     );
   }
 }

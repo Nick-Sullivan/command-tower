@@ -46,6 +46,15 @@ Future<AppSettings> _pumpApp(WidgetTester tester) async {
   return settings;
 }
 
+/// Switches the menu to [label]'s tab. The tabs scroll when they don't all
+/// fit, as with the test font's wide letters, so bring it into view first.
+Future<void> _tapTab(WidgetTester tester, String label) async {
+  final tab = find.widgetWithText(Tab, label);
+  await tester.ensureVisible(tab);
+  await tester.pumpAndSettle();
+  await tester.tap(tab);
+}
+
 /// Lets the running delta fade and any counter view time out, so no timers
 /// are left pending.
 Future<void> _settle(WidgetTester tester) =>
@@ -103,7 +112,7 @@ void main() {
     await _pumpApp(tester);
     await tester.tap(find.byIcon(Icons.settings));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Device'));
+    await _tapTab(tester, 'Device');
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SwitchListTile, 'Vibration'));
     await tester.tap(find.text('Done'));
@@ -426,7 +435,7 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.settings));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Tracking'));
+      await _tapTab(tester, 'Tracking');
       await tester.pumpAndSettle();
       // Counters apply as they're chosen, so there's nothing to Start.
       expect(find.text('Start'), findsNothing);
@@ -571,7 +580,7 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.settings));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Tracking'));
+      await _tapTab(tester, 'Tracking');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Commander damage'));
       await tester.tap(find.text('Done'));
@@ -707,7 +716,7 @@ void main() {
       final settings = await _pumpApp(tester);
       await tester.tap(find.byIcon(Icons.settings));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Device'));
+      await _tapTab(tester, 'Device');
       await tester.pumpAndSettle();
       // The choices are there but greyed out until sound is on.
       final plusRow = find.byKey(const ValueKey(('sound', 'plus')));
@@ -751,7 +760,7 @@ void main() {
       expect(diceButton, findsNothing);
       await tester.tap(find.byIcon(Icons.settings));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Tracking'));
+      await _tapTab(tester, 'Tracking');
       await tester.pumpAndSettle();
       // Which dice to offer only shows once dice are on.
       expect(find.byKey(const ValueKey('dice-shown')), findsNothing);
@@ -822,7 +831,7 @@ void main() {
       settings.setDieShown(Die.d6, false);
       await tester.tap(find.byIcon(Icons.settings));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Tracking'));
+      await _tapTab(tester, 'Tracking');
       await tester.pumpAndSettle();
       final d20 = find.widgetWithText(FilterChip, 'd20');
       expect(tester.widget<FilterChip>(d20).onSelected, isNotNull);
@@ -830,6 +839,125 @@ void main() {
       await tester.pump();
       expect(settings.diceShown, [Die.d20]);
       expect(tester.widget<FilterChip>(d20).selected, isTrue);
+    });
+  });
+
+  group('turn timer', () {
+    Finder inSeat(int seat, Key key) =>
+        find.descendant(of: _seat(seat), matching: find.byKey(key));
+    const border = ValueKey('turn-border');
+    const clockKey = ValueKey('turn-clock');
+    String clockIn(WidgetTester tester, int seat) =>
+        tester.widget<Text>(inSeat(seat, clockKey)).data!;
+
+    testWidgets('off by default: no turns shown', (tester) async {
+      await _pumpApp(tester);
+      await tester.pump();
+      expect(find.byKey(border), findsNothing);
+      expect(_game.turnPlayer, isNull);
+    });
+
+    testWidgets('outlines whose turn it is, times it, and passes it on', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      settings.setTurnTimer(true);
+      await tester.pump();
+      await tester.pump();
+      expect(_game.turnPlayer, 0);
+      expect(inSeat(0, border), findsOneWidget);
+      expect(find.byKey(border), findsOneWidget);
+      expect(clockIn(tester, 0), '0:00');
+      // The time is part of the end-turn button itself.
+      expect(
+        find.descendant(
+          of: inSeat(0, const ValueKey('end-turn')),
+          matching: find.byKey(clockKey),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.pump(const Duration(seconds: 65));
+      expect(clockIn(tester, 0), '1:05');
+
+      // Only the active player has the end-turn button.
+      expect(inSeat(1, const ValueKey('end-turn')), findsNothing);
+      await tester.tap(inSeat(0, const ValueKey('end-turn')));
+      await tester.pump();
+      expect(_game.turnPlayer, 1);
+      expect(inSeat(1, border), findsOneWidget);
+      expect(inSeat(0, border), findsNothing);
+      expect(clockIn(tester, 1), '0:00');
+    });
+
+    testWidgets('turn times sit with the Turn timer chip, atop Tracking', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      Future<void> openStats() async {
+        await tester.tap(find.byIcon(Icons.settings));
+        await tester.pumpAndSettle();
+        await _tapTab(tester, 'Tracking');
+        await tester.pumpAndSettle();
+      }
+
+      // The Turn timer chip comes first in the tab; no times until it's on.
+      await openStats();
+      final timerChip = tester.getRect(
+        find.widgetWithText(FilterChip, 'Turn timer'),
+      );
+      for (final other in ['Commander damage', 'Dice', 'Poison']) {
+        expect(
+          timerChip.top,
+          lessThan(tester.getRect(find.widgetWithText(FilterChip, other)).top),
+        );
+      }
+      expect(find.byKey(const ValueKey('turn-stats')), findsNothing);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      settings.setTurnTimer(true);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 30));
+      await tester.tap(inSeat(0, const ValueKey('end-turn')));
+      await tester.pump();
+
+      await openStats();
+      String row(int p) => [
+        for (final t in tester.widgetList<Text>(
+          find.descendant(
+            of: find.byKey(const ValueKey('turn-stats')),
+            matching: find.byType(Text),
+          ),
+        ))
+          t.data,
+      ].join(' ');
+      // Row by row: header, then each player's turns, total and average.
+      final cells = row(0);
+      expect(cells, startsWith('Turns Total Average 1 0:30 0:30 1 0:00 0:00'));
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the time stands still while the menu is open', (tester) async {
+      final settings = await _pumpApp(tester);
+      settings.setTurnTimer(true);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 10));
+      expect(clockIn(tester, 0), '0:10');
+
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(minutes: 2));
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+      // Ten seconds before, the menu's time ignored, then the dialog's close
+      // animation and a second's tick: well under the two minutes.
+      final shown = clockIn(tester, 0);
+      expect(shown.startsWith('0:1'), isTrue, reason: shown);
     });
   });
 

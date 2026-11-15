@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../game/game.dart';
 import '../sound/sounds.dart';
 import 'counter_icon.dart';
+import 'turn_clock.dart';
 import 'crossed_swords.dart';
 import 'plus_minus_area.dart';
 import 'skull.dart';
@@ -66,6 +67,8 @@ class PlayerPanel extends StatefulWidget {
     required this.onLifeChange,
     required this.onDamageChange,
     this.onCounterChange,
+    this.turnElapsed,
+    this.onEndTurn,
   });
 
   final int life;
@@ -89,6 +92,12 @@ class PlayerPanel extends StatefulWidget {
   /// The counters turned on in settings, in bar order.
   final List<CounterValue> counters;
   final void Function(Counter counter, int delta)? onCounterChange;
+
+  /// When it's this player's turn and the turn timer is on: how long the
+  /// turn has run. The panel is outlined and shows the time, which is also
+  /// the button that ends the turn.
+  final ValueGetter<Duration>? turnElapsed;
+  final VoidCallback? onEndTurn;
 
   @override
   State<PlayerPanel> createState() => _PlayerPanelState();
@@ -236,6 +245,17 @@ class _PlayerPanelState extends State<PlayerPanel> {
               child: const ColoredBox(color: _fog),
             ),
           ),
+          // Whose turn it is.
+          if (widget.turnElapsed != null)
+            IgnorePointer(
+              child: DecoratedBox(
+                key: const ValueKey('turn-border'),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white, width: 4),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -414,11 +434,13 @@ class _PlayerPanelState extends State<PlayerPanel> {
     );
   }
 
-  /// The row of buttons along the bottom: swords, then each counter. They
-  /// stay centred in every view, so the button that opened a view is under
-  /// your finger to close it. Away from the life view, the life total sits
-  /// beside them.
+  /// The row of buttons along the bottom: swords, then each counter, then end
+  /// turn on the player whose turn it is. They stay centred in every view, so
+  /// the button that opened a view is under your finger to close it. Away
+  /// from the life view, the life total sits to their right; the turn's time
+  /// sits to their left.
   Widget _bar(double barHeight, {required bool showLife}) {
+    final turnElapsed = widget.turnElapsed;
     return LayoutBuilder(
       builder: (context, constraints) => Row(
         children: [
@@ -436,6 +458,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
                   if (widget.commanderDamage) _swordsButton(barHeight),
                   for (final cv in widget.counters)
                     _counterButton(cv, barHeight),
+                  if (turnElapsed != null) _turnPill(turnElapsed, barHeight),
                 ],
               ),
             ),
@@ -473,6 +496,52 @@ class _PlayerPanelState extends State<PlayerPanel> {
               ),
             )
           : const SizedBox(),
+    );
+  }
+
+  /// The turn: how long it's been going, and ending it, in one solid pill
+  /// so the time and the button that resets it are together. The whole pill
+  /// ends the turn.
+  Widget _turnPill(ValueGetter<Duration> elapsed, double barHeight) {
+    final height = (barHeight * 0.75).clamp(36.0, 48.0);
+    final foreground = widget.color;
+    return GestureDetector(
+      key: const ValueKey('end-turn'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        SoundScope.vibrate(context);
+        widget.onEndTurn?.call();
+      },
+      child: Container(
+        height: barHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        alignment: Alignment.center,
+        child: Container(
+          height: height,
+          padding: EdgeInsets.only(left: height * 0.3, right: height * 0.15),
+          decoration: const ShapeDecoration(
+            shape: StadiumBorder(),
+            color: Colors.white,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.timer, size: height * 0.5, color: foreground),
+              SizedBox(width: height * 0.15),
+              TurnClock(
+                elapsed: elapsed,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: height * 0.5,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              SizedBox(width: height * 0.15),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

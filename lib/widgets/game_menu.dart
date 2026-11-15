@@ -23,10 +23,15 @@ class GameMenuButton extends StatelessWidget {
       shape: const CircleBorder(),
       child: IconButton(
         icon: const Icon(Icons.settings, color: Colors.white70),
-        onPressed: () => showDialog<void>(
-          context: context,
-          builder: (_) => GameMenuDialog(game: game, settings: settings),
-        ),
+        // Time spent in the menu doesn't count against anyone's turn.
+        onPressed: () async {
+          game.pauseTurn();
+          await showDialog<void>(
+            context: context,
+            builder: (_) => GameMenuDialog(game: game, settings: settings),
+          );
+          game.resumeTurn();
+        },
       ),
     );
   }
@@ -105,8 +110,11 @@ class _GameMenuDialogState extends State<GameMenuDialog>
       titlePadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       title: TabBar(
         controller: _tabs,
-        // Tighter than the default so three labels fit without cutting off.
-        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        // Each tab as wide as its label, centred together, so they all fit
+        // without cutting any off.
+        isScrollable: true,
+        tabAlignment: TabAlignment.center,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 10),
         tabs: const [
           Tab(text: 'New game'),
           Tab(text: 'Tracking'),
@@ -139,7 +147,7 @@ class _GameMenuDialogState extends State<GameMenuDialog>
             alignment: AlignmentDirectional.topStart,
             children: [
               _newGame(titleStyle, layouts),
-              TrackingSettings(settings: widget.settings),
+              TrackingSettings(settings: widget.settings, game: widget.game),
               DeviceSettings(settings: widget.settings),
             ],
           ),

@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 
 import 'counters.dart';
@@ -104,6 +105,88 @@ class Game extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whose turn it is, for the turn timer; null until the timer starts.
+  int? get turnPlayer => _turnPlayer;
+  int? _turnPlayer;
+
+  /// When the current turn began.
+  DateTime? get turnStarted => _turnStarted;
+  DateTime? _turnStarted;
+
+  /// When the turn's time was paused (while the menu is open), or null while
+  /// it's running.
+  DateTime? get turnPaused => _turnPaused;
+  DateTime? _turnPaused;
+
+  /// How long the current turn has run, not counting pauses.
+  Duration get turnElapsed {
+    final started = _turnStarted;
+    if (started == null) return Duration.zero;
+    final elapsed = (_turnPaused ?? clock.now()).difference(started);
+    return elapsed.isNegative ? Duration.zero : elapsed;
+  }
+
+  /// Freezes the turn's time, e.g. while the menu is open.
+  void pauseTurn() {
+    if (_turnStarted == null || _turnPaused != null) return;
+    _turnPaused = clock.now();
+    notifyListeners();
+  }
+
+  /// Carries on from where [pauseTurn] froze it.
+  void resumeTurn() {
+    final paused = _turnPaused;
+    final started = _turnStarted;
+    if (paused == null || started == null) return;
+    _turnStarted = started.add(clock.now().difference(paused));
+    _turnPaused = null;
+    notifyListeners();
+  }
+
+  /// Each player's finished turns: how many, and their time added up.
+  late List<int> _turnCounts;
+  late List<Duration> _turnTotals;
+
+  /// How many turns [player] has had, including one in progress.
+  int turnCount(int player) =>
+      _turnCounts[player] + (_turnPlayer == player ? 1 : 0);
+
+  /// [player]'s time across all their turns, including one in progress.
+  Duration turnTotal(int player) =>
+      _turnTotals[player] +
+      (_turnPlayer == player ? turnElapsed : Duration.zero);
+
+  /// Starts taking turns, if not already: with the starting player when one
+  /// was picked, otherwise the first seat.
+  void startTurns() {
+    if (_turnPlayer != null) return;
+    _turnPlayer = _startingPlayer ?? 0;
+    _turnStarted = clock.now();
+    _turnPaused = null;
+    notifyListeners();
+  }
+
+  /// Passes the turn clockwise (seat order) to the next player still in the
+  /// game, and restarts the turn's time.
+  void endTurn() {
+    final current = _turnPlayer;
+    if (current == null) return;
+    _turnCounts[current]++;
+    _turnTotals[current] += turnElapsed;
+    var next = current;
+    for (var i = 1; i <= _playerCount; i++) {
+      final candidate = (current + i) % _playerCount;
+      if (!isKnockedOut(candidate)) {
+        next = candidate;
+        break;
+      }
+    }
+    _turnPlayer = next;
+    _turnStarted = clock.now();
+    _turnPaused = null;
+    notifyListeners();
+  }
+
   void newGame({
     required int playerCount,
     required int layoutIndex,
@@ -123,6 +206,12 @@ class Game extends ChangeNotifier {
     'life': _life,
     'commanderDamage': _commanderDamage,
     'counters': {for (final c in Counter.values) c.name: _counters[c]},
+    if (_turnPlayer != null) 'turnPlayer': _turnPlayer,
+    if (_turnStarted != null)
+      'turnStarted': _turnStarted!.millisecondsSinceEpoch,
+    if (_turnPaused != null) 'turnPaused': _turnPaused!.millisecondsSinceEpoch,
+    'turnCounts': _turnCounts,
+    'turnTotalsMs': [for (final t in _turnTotals) t.inMilliseconds],
   };
 
   /// Restores a saved game, or returns null if [json] isn't one this version
@@ -172,6 +261,33 @@ class Game extends ChangeNotifier {
         game._counters[c] = (values as List).cast<int>().toList();
       }
     }
+
+    // The turn in progress, if the turn timer was running; ignored if it
+    // doesn't fit this game.
+    final turnPlayer = json['turnPlayer'];
+    final turnStarted = json['turnStarted'];
+    if (turnPlayer is int &&
+        turnPlayer >= 0 &&
+        turnPlayer < playerCount &&
+        turnStarted is int) {
+      game._turnPlayer = turnPlayer;
+      game._turnStarted = DateTime.fromMillisecondsSinceEpoch(turnStarted);
+      final turnPaused = json['turnPaused'];
+      if (turnPaused is int) {
+        game._turnPaused = DateTime.fromMillisecondsSinceEpoch(turnPaused);
+      }
+    }
+
+    // Turn stats; older saves (or ones that don't fit) start from nothing.
+    final counts = json['turnCounts'];
+    final totals = json['turnTotalsMs'];
+    if (_isIntList(counts, playerCount) && _isIntList(totals, playerCount)) {
+      game._turnCounts = (counts as List).cast<int>().toList();
+      game._turnTotals = [
+        for (final ms in (totals as List).cast<int>())
+          Duration(milliseconds: ms),
+      ];
+    }
     return game;
   }
 
@@ -191,6 +307,12 @@ class Game extends ChangeNotifier {
     _counters = {
       for (final c in Counter.values) c: List.filled(playerCount, 0),
     };
+    // Turns start again (if the timer is on) once the table is showing.
+    _turnPlayer = null;
+    _turnStarted = null;
+    _turnPaused = null;
+    _turnCounts = List.filled(playerCount, 0);
+    _turnTotals = List.filled(playerCount, Duration.zero);
     _generation++;
   }
 }
