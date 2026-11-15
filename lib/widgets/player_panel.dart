@@ -136,39 +136,49 @@ class _PlayerPanelState extends State<PlayerPanel> {
   void _changeDamage(int from, int delta) {
     final changed = widget.onDamageChange(from, delta);
     _trackLifeChange(-changed);
+    _restartViewTimeout();
   }
 
   // No haptics when switching views: the click is reserved for changes to
   // the numbers.
-  void _toggleDamageMode() => setState(() {
-    _damageMode = !_damageMode;
-    _counterMode = null;
-  });
+  void _toggleDamageMode() {
+    setState(() {
+      _damageMode = !_damageMode;
+      _counterMode = null;
+    });
+    _restartViewTimeout();
+  }
 
   void _toggleCounter(Counter counter) {
     setState(() {
       _counterMode = _shownCounter?.counter == counter ? null : counter;
       _damageMode = false;
     });
-    _restartCounterTimeout();
+    _restartViewTimeout();
   }
 
-  /// How long a counter stays shown without a tap before the panel goes
-  /// back to life, so it's never left showing the wrong number.
-  static const _counterTimeout = Duration(seconds: 5);
-  Timer? _counterTimer;
+  /// How long commander damage or a counter stays shown without a tap
+  /// before the panel goes back to life, so it's never left showing the
+  /// wrong thing.
+  static const _viewTimeout = Duration(seconds: 5);
+  Timer? _viewTimer;
 
-  void _restartCounterTimeout() {
-    _counterTimer?.cancel();
-    if (_counterMode == null) return;
-    _counterTimer = Timer(_counterTimeout, () {
-      if (mounted) setState(() => _counterMode = null);
+  void _restartViewTimeout() {
+    _viewTimer?.cancel();
+    if (!_damageMode && _counterMode == null) return;
+    _viewTimer = Timer(_viewTimeout, () {
+      if (mounted) {
+        setState(() {
+          _damageMode = false;
+          _counterMode = null;
+        });
+      }
     });
   }
 
   void _changeCounter(Counter counter, int delta) {
     widget.onCounterChange?.call(counter, delta);
-    _restartCounterTimeout();
+    _restartViewTimeout();
   }
 
   @override
@@ -184,7 +194,7 @@ class _PlayerPanelState extends State<PlayerPanel> {
   @override
   void dispose() {
     _deltaTimer?.cancel();
-    _counterTimer?.cancel();
+    _viewTimer?.cancel();
     super.dispose();
   }
 
@@ -308,6 +318,8 @@ class _PlayerPanelState extends State<PlayerPanel> {
       children: [
         PlusMinusArea(
           key: ValueKey(('counter-area', counter.name)),
+          // Counters aren't health, so they don't play sounds.
+          sound: false,
           onChange: (d) => _changeCounter(counter, d * counter.step),
           child: Center(
             child: Column(
@@ -580,6 +592,8 @@ class _DamageArea extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: PlusMinusArea(
         markSize: 20,
+        // Adding damage takes life away, so it sounds like losing life.
+        reverseSound: true,
         onChange: onChange,
         child: LayoutBuilder(
           builder: (context, constraints) => Center(

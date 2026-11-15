@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:command_tower/game/counters.dart';
+import 'package:command_tower/game/dice.dart';
 import 'package:command_tower/sound/sounds.dart';
 import 'package:command_tower/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,6 +76,32 @@ void main() {
         reason: sound.name,
       );
     }
+  });
+
+  test(
+    'dice are off, offering coin, d6 and d20 until chosen otherwise',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = await AppSettings.open();
+      expect(settings.dice, isFalse);
+      expect(settings.diceShown, [Die.coin, Die.d6, Die.d20]);
+
+      settings.setDice(true);
+      settings.setDieShown(Die.d4, true);
+      settings.setDieShown(Die.coin, false);
+      final relaunched = await AppSettings.open();
+      expect(relaunched.dice, isTrue);
+      expect(relaunched.diceShown, [Die.d4, Die.d6, Die.d20]);
+    },
+  );
+
+  test('the last die shown can never be hidden', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await AppSettings.open();
+    settings.setDieShown(Die.coin, false);
+    settings.setDieShown(Die.d6, false);
+    settings.setDieShown(Die.d20, false);
+    expect(settings.diceShown, [Die.d20]);
   });
 
   test('random starting player is off until turned on, and stays on', () async {

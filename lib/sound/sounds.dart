@@ -5,10 +5,12 @@ import '../settings/app_settings.dart';
 
 /// When a sound plays.
 enum SoundRole {
-  /// Every tap of a − half: taking a hit.
+  /// Taking a hit: every tap of a − half, except on commander damage, where
+  /// it's the + half (adding damage takes life away).
   minus,
 
-  /// Every tap of a + half: healing or gaining.
+  /// Healing or gaining: every tap of a + half, except on commander damage,
+  /// where it's the − half.
   plus,
 
   /// A player being knocked out.

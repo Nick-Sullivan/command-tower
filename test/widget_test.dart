@@ -1,3 +1,4 @@
+import 'package:command_tower/game/dice.dart';
 import 'package:command_tower/game/game.dart';
 import 'package:command_tower/main.dart';
 import 'package:command_tower/settings/app_settings.dart';
@@ -282,6 +283,26 @@ void main() {
             .first,
       );
       expect(material.color, playerColors[_top]);
+      await _settle(tester);
+    });
+
+    testWidgets('goes back to life 5 seconds after the last tap', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+      await tester.tap(swords(_bottom));
+      await tester.pump();
+      final area = tester.getRect(damageFrom(_bottom, _top));
+
+      // Each tap restarts the countdown.
+      await tester.pump(const Duration(seconds: 4));
+      await tester.tapAt(Offset(area.right - area.width / 4, area.center.dy));
+      await tester.pump(const Duration(seconds: 4));
+      expect(damageFrom(_bottom, _top), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(damageFrom(_bottom, _top), findsNothing);
+      expect(_textInSeat(_bottom, '39'), findsOneWidget);
       await _settle(tester);
     });
 
@@ -571,7 +592,7 @@ void main() {
         settings.sound(SoundRole.plus),
       ]);
 
-      // Adding commander damage is a + tap, so it plays the + sound.
+      // Adding commander damage takes life away, so it plays the − sound.
       await tester.tap(
         find.descendant(
           of: _seat(_bottom),
@@ -586,7 +607,33 @@ void main() {
         ),
       );
       await tester.tapAt(Offset(area.right - area.width / 4, area.center.dy));
-      expect(_sounds.played.last, settings.sound(SoundRole.plus));
+      expect(_sounds.played.last, settings.sound(SoundRole.minus));
+      await _settle(tester);
+    });
+
+    testWidgets('counters are silent: sound is for health only', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      settings.setSoundOn(true);
+      settings.setCounter(Counter.poison, true);
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: _seat(_bottom),
+          matching: find.byKey(const ValueKey(('counter', 'poison'))),
+        ),
+      );
+      await tester.pump();
+      final area = tester.getRect(
+        find.descendant(
+          of: _seat(_bottom),
+          matching: find.byKey(const ValueKey(('counter-area', 'poison'))),
+        ),
+      );
+      await tester.tapAt(Offset(area.right - area.width / 4, area.center.dy));
+      await tester.tapAt(Offset(area.left + area.width / 4, area.center.dy));
+      expect(_sounds.played, isEmpty);
       await _settle(tester);
     });
 
@@ -654,6 +701,98 @@ void main() {
       await tester.pumpAndSettle();
       expect(settings.sound(SoundRole.plus), Sound.phaserUp);
       expect(_sounds.played, [Sound.phaserUp]);
+    });
+  });
+
+  group('dice', () {
+    final diceButton = find.byKey(const ValueKey('dice-button'));
+
+    testWidgets('turned on in Tracking, they add a button beside the ⚙', (
+      tester,
+    ) async {
+      await _pumpApp(tester);
+      expect(diceButton, findsNothing);
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tracking'));
+      await tester.pumpAndSettle();
+      // Which dice to offer only shows once dice are on.
+      expect(find.byKey(const ValueKey('dice-shown')), findsNothing);
+      await tester.tap(find.text('Dice'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('dice-shown')), findsOneWidget);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      expect(diceButton, findsOneWidget);
+      // Side by side, centred together.
+      final gear = tester.getRect(
+        find.ancestor(
+          of: find.byIcon(Icons.settings),
+          matching: find.byType(IconButton),
+        ),
+      );
+      final dice = tester.getRect(diceButton);
+      final screen = tester.getRect(find.byType(Scaffold));
+      expect((gear.left + dice.right) / 2, closeTo(screen.center.dx, 1));
+    });
+
+    testWidgets('the button pops out the chosen dice; tap one to roll it', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      settings.setDice(true);
+      settings.setDieShown(Die.d8, true);
+      await tester.pump();
+      Finder die(Die d) => find.byKey(ValueKey(('die', d.name)));
+      Finder dieResult(Die d) => find.byKey(ValueKey(('die-result', d.name)));
+      String resultOf(Die d) => tester.widget<Text>(dieResult(d)).data!;
+
+      await tester.tap(diceButton);
+      await tester.pump();
+      // Just the dice chosen in Tracking, each showing its name.
+      for (final d in Die.values) {
+        expect(
+          die(d),
+          settings.diceShown.contains(d) ? findsOneWidget : findsNothing,
+        );
+      }
+      expect(dieResult(Die.d20), findsNothing);
+
+      // Tapping a die rolls it in place.
+      await tester.tap(die(Die.d20));
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(int.parse(resultOf(Die.d20)), inInclusiveRange(1, 20));
+      await tester.tap(die(Die.coin));
+      await tester.pump(const Duration(milliseconds: 700));
+      expect(['Heads', 'Tails'], contains(resultOf(Die.coin)));
+      // Each die keeps its own result.
+      expect(dieResult(Die.d20), findsOneWidget);
+
+      // Tapping off the dice tucks them away.
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pump();
+      expect(die(Die.d20), findsNothing);
+      expect(_game.life, [40, 40, 40, 40]);
+    });
+
+    testWidgets('the last die chosen stays on, and isn\'t greyed out', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      settings.setDice(true);
+      settings.setDieShown(Die.coin, false);
+      settings.setDieShown(Die.d6, false);
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tracking'));
+      await tester.pumpAndSettle();
+      final d20 = find.widgetWithText(FilterChip, 'd20');
+      expect(tester.widget<FilterChip>(d20).onSelected, isNotNull);
+      await tester.tap(d20);
+      await tester.pump();
+      expect(settings.diceShown, [Die.d20]);
+      expect(tester.widget<FilterChip>(d20).selected, isTrue);
     });
   });
 

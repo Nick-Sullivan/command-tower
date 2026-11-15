@@ -15,10 +15,20 @@ class PlusMinusArea extends StatefulWidget {
     required this.onChange,
     required this.child,
     this.markSize = 32,
+    this.reverseSound = false,
+    this.sound = true,
   });
+
+  /// Whether taps play the − and + sounds: only for things that change life,
+  /// not counters like poison.
+  final bool sound;
 
   final ValueChanged<int> onChange;
   final Widget child;
+
+  /// Plays the − sound for + taps and vice versa: for commander damage,
+  /// where adding damage takes life away.
+  final bool reverseSound;
 
   /// Size of the faint − and + marks at the edges.
   final double markSize;
@@ -42,7 +52,9 @@ class _PlusMinusAreaState extends State<PlusMinusArea> {
     // phones play it at zero strength. Android still skips this when the user
     // has touch feedback turned off.
     HapticFeedback.lightImpact();
-    SoundScope.tap(context, change.sign);
+    if (widget.sound) {
+      SoundScope.tap(context, widget.reverseSound ? -change.sign : change.sign);
+    }
     widget.onChange(change);
   }
 

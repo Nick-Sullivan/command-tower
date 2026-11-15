@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../game/game.dart';
 import '../game/layouts.dart';
 import '../settings/app_settings.dart';
+import 'dice_roller.dart';
 import 'game_menu.dart';
 import 'player_panel.dart';
 import 'starting_player_spin.dart';
@@ -91,12 +92,32 @@ class GameScreen extends StatelessWidget {
                             ),
                           ),
                         ),
+                      // Where the panels meet: the ⚙, and the dice beside it
+                      // when they're turned on.
                       Positioned(
-                        left: (size.width - _menuButtonSize) / 2,
+                        left: 0,
+                        right: 0,
                         top: (size.height - _menuButtonSize) / 2,
-                        width: _menuButtonSize,
                         height: _menuButtonSize,
-                        child: GameMenuButton(game: game, settings: settings),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox.square(
+                              dimension: _menuButtonSize,
+                              child: GameMenuButton(
+                                game: game,
+                                settings: settings,
+                              ),
+                            ),
+                            if (settings.dice) ...[
+                              const SizedBox(width: 8),
+                              SizedBox.square(
+                                dimension: _menuButtonSize,
+                                child: DiceButton(settings: settings),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                       if (startingPlayer != null)
                         StartingPlayerSpin(

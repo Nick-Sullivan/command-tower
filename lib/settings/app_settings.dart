@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../game/counters.dart';
+import '../game/dice.dart';
 import '../sound/sounds.dart';
 
 /// Choices that outlast a single game, from the Tracking tab. Every change is
@@ -32,6 +33,48 @@ class AppSettings extends ChangeNotifier {
   void setCommanderDamage(bool on) {
     if (on == commanderDamage) return;
     _prefs.setBool(_commanderDamageKey, on);
+    notifyListeners();
+  }
+
+  static const _diceKey = 'dice';
+  static const _diceShownKey = 'diceShown';
+  static const _defaultDice = {Die.coin, Die.d6, Die.d20};
+
+  /// Whether the table has a dice button. Off by default.
+  bool get dice => _prefs.getBool(_diceKey) ?? false;
+
+  void setDice(bool on) {
+    if (on == dice) return;
+    _prefs.setBool(_diceKey, on);
+    notifyListeners();
+  }
+
+  /// The dice the roller offers, in order. Never empty.
+  List<Die> get diceShown {
+    final saved = _prefs.getStringList(_diceShownKey);
+    final shown = [
+      for (final d in Die.values)
+        if (saved == null ? _defaultDice.contains(d) : saved.contains(d.name))
+          d,
+    ];
+    return shown.isEmpty ? [for (final d in _defaultDice) d] : shown;
+  }
+
+  /// Shows or hides [die] in the roller; the last one can't be hidden.
+  void setDieShown(Die die, bool shown) {
+    final current = diceShown;
+    if (shown == current.contains(die)) return;
+    if (!shown && current.length == 1) return;
+    final next = shown
+        ? [...current, die]
+        : [
+            for (final d in current)
+              if (d != die) d,
+          ];
+    _prefs.setStringList(_diceShownKey, [
+      for (final d in Die.values)
+        if (next.contains(d)) d.name,
+    ]);
     notifyListeners();
   }
 

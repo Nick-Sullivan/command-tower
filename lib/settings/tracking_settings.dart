@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../game/counters.dart';
+import '../game/dice.dart';
 import '../widgets/counter_icon.dart';
 import '../widgets/crossed_swords.dart';
 import 'app_settings.dart';
 
-/// A chip per thing you can track; selected ones appear on every panel.
-/// Changes apply straight away and never reset the game.
+/// A chip per thing on the table, alphabetically; selected ones appear on
+/// every panel (or, for dice, as a button by the ⚙). Changes apply straight
+/// away and never reset the game.
 class TrackingSettings extends StatelessWidget {
   const TrackingSettings({super.key, required this.settings});
 
@@ -18,10 +20,9 @@ class TrackingSettings extends StatelessWidget {
       listenable: settings,
       builder: (context, _) {
         final on = settings.counters;
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
+        final chips = <(String, Widget)>[
+          (
+            'Commander damage',
             FilterChip(
               avatar: Builder(
                 builder: (context) => CrossedSwords(
@@ -34,7 +35,11 @@ class TrackingSettings extends StatelessWidget {
               selected: settings.commanderDamage,
               onSelected: settings.setCommanderDamage,
             ),
-            for (final c in Counter.values)
+          ),
+          ('Dice', _Dice(settings: settings)),
+          for (final c in Counter.values)
+            (
+              c.label,
               FilterChip(
                 avatar: Icon(counterIcons[c], size: 18),
                 showCheckmark: false,
@@ -42,9 +47,59 @@ class TrackingSettings extends StatelessWidget {
                 selected: on.contains(c),
                 onSelected: (selected) => settings.setCounter(c, selected),
               ),
-          ],
+            ),
+        ]..sort((a, b) => a.$1.compareTo(b.$1));
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [for (final (_, chip) in chips) chip],
         );
       },
+    );
+  }
+}
+
+/// The Dice chip. Once it's on, it opens out in place into a box holding
+/// the chip and, beside it, which dice the roller offers.
+class _Dice extends StatelessWidget {
+  const _Dice({required this.settings});
+
+  final AppSettings settings;
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = FilterChip(
+      avatar: const Icon(Icons.casino, size: 18),
+      showCheckmark: false,
+      label: const Text('Dice'),
+      selected: settings.dice,
+      onSelected: settings.setDice,
+    );
+    if (!settings.dice) return chip;
+    final shown = settings.diceShown;
+    return Container(
+      key: const ValueKey('dice-shown'),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          chip,
+          for (final die in Die.values)
+            FilterChip(
+              showCheckmark: false,
+              label: Text(die.label),
+              selected: shown.contains(die),
+              // The last die shown can't be turned off, but it still looks
+              // like any other selected die rather than greyed out.
+              onSelected: (selected) => settings.setDieShown(die, selected),
+            ),
+        ],
+      ),
     );
   }
 }
