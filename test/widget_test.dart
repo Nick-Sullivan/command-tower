@@ -27,12 +27,13 @@ class _FakeSounds implements SoundPlayer {
 }
 
 late _FakeSounds _sounds;
+late Game _game;
 
 Future<AppSettings> _pumpApp(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2220);
   tester.view.devicePixelRatio = 2.75;
   addTearDown(tester.view.reset);
-  final game = Game();
+  final game = _game = Game();
   addTearDown(game.dispose);
   SharedPreferences.setMockInitialValues({});
   final settings = await AppSettings.open();
@@ -656,6 +657,67 @@ void main() {
     });
   });
 
+  group('random starting player', () {
+    final highlight = find.byKey(const ValueKey('starting-player-highlight'));
+
+    Future<void> startNewGame(
+      WidgetTester tester, {
+      required bool random,
+    }) async {
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      if (random) {
+        await tester.tap(find.text('Random starting player'));
+        await tester.pump();
+      }
+      await tester.tap(find.text('Start'));
+      await tester.pump();
+    }
+
+    testWidgets('off by default: Start picks nobody', (tester) async {
+      await _pumpApp(tester);
+      await startNewGame(tester, random: false);
+      await tester.pumpAndSettle();
+      expect(_game.startingPlayer, isNull);
+      expect(highlight, findsNothing);
+    });
+
+    testWidgets('spins, lands on the chosen player, and clears on a touch', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      await startNewGame(tester, random: true);
+      expect(settings.randomStartingPlayer, isTrue);
+      final chosen = _game.startingPlayer!;
+      expect(chosen, inInclusiveRange(0, 3));
+      expect(highlight, findsOneWidget);
+
+      // After the spin, the highlight sits on the chosen player's panel.
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(highlight), tester.getRect(_seat(chosen)));
+
+      // The first touch clears it, and changes nothing else.
+      final rect = tester.getRect(_seat(_bottom));
+      await tester.tapAt(Offset(rect.left + rect.width / 4, rect.center.dy));
+      await tester.pump();
+      expect(_game.startingPlayer, isNull);
+      expect(highlight, findsNothing);
+      await _settle(tester);
+    });
+
+    testWidgets('picks across the whole table', (tester) async {
+      await _pumpApp(tester);
+      final picked = <int>{};
+      for (var i = 0; i < 40 && picked.length < 4; i++) {
+        await startNewGame(tester, random: i == 0);
+        picked.add(_game.startingPlayer!);
+        await tester.pumpAndSettle(const Duration(milliseconds: 100));
+      }
+      expect(picked, {0, 1, 2, 3});
+    });
+  });
+
   testWidgets('a new game applies the chosen players and life', (tester) async {
     await _pumpApp(tester);
     await tester.tap(find.byIcon(Icons.settings));
@@ -670,6 +732,50 @@ void main() {
     for (var i = 0; i < 6; i++) {
       expect(_textInSeat(i, '20'), findsOneWidget);
     }
+  });
+
+  group('Start asks first if it would lose a game in progress', () {
+    Future<void> changeLifeThenStart(WidgetTester tester) async {
+      final rect = tester.getRect(_seat(_bottom));
+      await tester.tapAt(Offset(rect.left + rect.width / 4, rect.center.dy));
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('cancelling keeps the game', (tester) async {
+      await _pumpApp(tester);
+      await changeLifeThenStart(tester);
+      expect(find.text('Start a new game?'), findsOneWidget);
+      await tester.tap(find.text('Cancel').last);
+      await tester.pumpAndSettle();
+      expect(_game.life[_bottom], 39);
+      // Back in the menu, nothing started.
+      expect(find.text('Random starting player'), findsOneWidget);
+      await _settle(tester);
+    });
+
+    testWidgets('confirming starts the new game', (tester) async {
+      await _pumpApp(tester);
+      await changeLifeThenStart(tester);
+      await tester.tap(find.byKey(const ValueKey('confirm-start')));
+      await tester.pumpAndSettle();
+      expect(_game.life[_bottom], 40);
+      expect(find.text('Start a new game?'), findsNothing);
+      expect(find.text('Random starting player'), findsNothing);
+    });
+
+    testWidgets('no question when nothing has happened yet', (tester) async {
+      await _pumpApp(tester);
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start'));
+      await tester.pumpAndSettle();
+      expect(find.text('Start a new game?'), findsNothing);
+      expect(find.text('Random starting player'), findsNothing);
+    });
   });
 
   testWidgets('cancel leaves the game as it was', (tester) async {

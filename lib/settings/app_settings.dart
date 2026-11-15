@@ -35,6 +35,18 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  static const _randomStartingPlayerKey = 'randomStartingPlayer';
+
+  /// Whether Start picks a random player to go first. Off by default.
+  bool get randomStartingPlayer =>
+      _prefs.getBool(_randomStartingPlayerKey) ?? false;
+
+  void setRandomStartingPlayer(bool on) {
+    if (on == randomStartingPlayer) return;
+    _prefs.setBool(_randomStartingPlayerKey, on);
+    notifyListeners();
+  }
+
   /// Off until turned on: a phone at a quiet table shouldn't make noise.
   bool get soundOn => _prefs.getBool(_soundOnKey) ?? false;
 

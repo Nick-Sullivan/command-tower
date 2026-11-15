@@ -89,6 +89,47 @@ void main() {
     expect(game.isKnockedOut(3), isFalse);
   });
 
+  test('progress is any change since the start', () {
+    for (final change in <void Function(Game)>[
+      (g) => g.changeLife(0, -1),
+      (g) => g.changeCommanderDamage(to: 1, from: 0, delta: 1),
+      (g) => g.changeCounter(Counter.energy, 2, 1),
+    ]) {
+      final game = Game();
+      expect(game.hasProgress, isFalse);
+      change(game);
+      expect(game.hasProgress, isTrue);
+    }
+    // Back to where it started counts as no progress.
+    final game = Game()
+      ..changeLife(0, -1)
+      ..changeLife(0, 1);
+    expect(game.hasProgress, isFalse);
+  });
+
+  test('a starting player lasts until cleared or the next new game', () {
+    final game = Game();
+    expect(game.startingPlayer, isNull);
+    game.newGame(
+      playerCount: 3,
+      layoutIndex: 0,
+      startingLife: 40,
+      startingPlayer: 2,
+    );
+    expect(game.startingPlayer, 2);
+    game.clearStartingPlayer();
+    expect(game.startingPlayer, isNull);
+
+    game.newGame(
+      playerCount: 3,
+      layoutIndex: 0,
+      startingLife: 40,
+      startingPlayer: 1,
+    );
+    game.newGame(playerCount: 3, layoutIndex: 0, startingLife: 40);
+    expect(game.startingPlayer, isNull);
+  });
+
   test('a new game resets life and moves to the next generation', () {
     final game = Game();
     final before = game.generation;

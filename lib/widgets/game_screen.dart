@@ -5,6 +5,7 @@ import '../game/layouts.dart';
 import '../settings/app_settings.dart';
 import 'game_menu.dart';
 import 'player_panel.dart';
+import 'starting_player_spin.dart';
 
 /// The table: every player's panel facing their seat, and the menu button
 /// where the panels meet.
@@ -30,61 +31,82 @@ class GameScreen extends StatelessWidget {
             return LayoutBuilder(
               builder: (context, constraints) {
                 final size = constraints.biggest;
-                return Stack(
-                  children: [
-                    for (var i = 0; i < seats.length; i++)
-                      Positioned.fromRect(
-                        rect: Rect.fromLTRB(
-                          seats[i].rect.left * size.width,
-                          seats[i].rect.top * size.height,
-                          seats[i].rect.right * size.width,
-                          seats[i].rect.bottom * size.height,
-                        ).deflate(_gap / 2),
-                        child: RotatedBox(
-                          key: ValueKey(('seat', i)),
-                          quarterTurns: seats[i].quarterTurns,
-                          child: PlayerPanel(
-                            key: ValueKey((game.generation, i)),
-                            life: game.life[i],
-                            color: playerColors[i],
-                            knockedOut: game.isKnockedOut(i),
-                            opponents: [
-                              for (final o in othersLeftToRight(
-                                game.layout,
-                                i,
-                                size,
-                              ))
-                                Opponent(
-                                  player: o,
-                                  color: playerColors[o],
-                                  damage: game.commanderDamage(to: i, from: o),
-                                ),
-                            ],
-                            commanderDamage: settings.commanderDamage,
-                            counters: [
-                              for (final c in counters)
-                                CounterValue(c, game.counter(c, i)),
-                            ],
-                            onCounterChange: (c, delta) =>
-                                game.changeCounter(c, i, delta),
-                            onLifeChange: (delta) => game.changeLife(i, delta),
-                            onDamageChange: (from, delta) =>
-                                game.changeCommanderDamage(
-                                  to: i,
-                                  from: from,
-                                  delta: delta,
-                                ),
+                final rects = [
+                  for (final seat in seats)
+                    Rect.fromLTRB(
+                      seat.rect.left * size.width,
+                      seat.rect.top * size.height,
+                      seat.rect.right * size.width,
+                      seat.rect.bottom * size.height,
+                    ).deflate(_gap / 2),
+                ];
+                final startingPlayer = game.startingPlayer;
+                // The first touch anywhere on the table clears the starting
+                // player's highlight (and skips the spin, if it's running).
+                return Listener(
+                  onPointerDown: (_) => game.clearStartingPlayer(),
+                  child: Stack(
+                    children: [
+                      for (var i = 0; i < seats.length; i++)
+                        Positioned.fromRect(
+                          rect: rects[i],
+                          child: RotatedBox(
+                            key: ValueKey(('seat', i)),
+                            quarterTurns: seats[i].quarterTurns,
+                            child: PlayerPanel(
+                              key: ValueKey((game.generation, i)),
+                              life: game.life[i],
+                              color: playerColors[i],
+                              knockedOut: game.isKnockedOut(i),
+                              opponents: [
+                                for (final o in othersLeftToRight(
+                                  game.layout,
+                                  i,
+                                  size,
+                                ))
+                                  Opponent(
+                                    player: o,
+                                    color: playerColors[o],
+                                    damage: game.commanderDamage(
+                                      to: i,
+                                      from: o,
+                                    ),
+                                  ),
+                              ],
+                              commanderDamage: settings.commanderDamage,
+                              counters: [
+                                for (final c in counters)
+                                  CounterValue(c, game.counter(c, i)),
+                              ],
+                              onCounterChange: (c, delta) =>
+                                  game.changeCounter(c, i, delta),
+                              onLifeChange: (delta) =>
+                                  game.changeLife(i, delta),
+                              onDamageChange: (from, delta) =>
+                                  game.changeCommanderDamage(
+                                    to: i,
+                                    from: from,
+                                    delta: delta,
+                                  ),
+                            ),
                           ),
                         ),
+                      Positioned(
+                        left: (size.width - _menuButtonSize) / 2,
+                        top: (size.height - _menuButtonSize) / 2,
+                        width: _menuButtonSize,
+                        height: _menuButtonSize,
+                        child: GameMenuButton(game: game, settings: settings),
                       ),
-                    Positioned(
-                      left: (size.width - _menuButtonSize) / 2,
-                      top: (size.height - _menuButtonSize) / 2,
-                      width: _menuButtonSize,
-                      height: _menuButtonSize,
-                      child: GameMenuButton(game: game, settings: settings),
-                    ),
-                  ],
+                      if (startingPlayer != null)
+                        StartingPlayerSpin(
+                          // A new game restarts the spin.
+                          key: ValueKey(('starting-player', game.generation)),
+                          seatRects: rects,
+                          chosen: startingPlayer,
+                        ),
+                    ],
+                  ),
                 );
               },
             );

@@ -77,6 +77,14 @@ void main() {
     }
   });
 
+  test('random starting player is off until turned on, and stays on', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await AppSettings.open();
+    expect(settings.randomStartingPlayer, isFalse);
+    settings.setRandomStartingPlayer(true);
+    expect((await AppSettings.open()).randomStartingPlayer, isTrue);
+  });
+
   test('commander damage is on until turned off, and stays off', () async {
     SharedPreferences.setMockInitialValues({});
     final settings = await AppSettings.open();

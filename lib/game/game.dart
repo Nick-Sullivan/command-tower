@@ -86,12 +86,33 @@ class Game extends ChangeNotifier {
     return after - before;
   }
 
+  /// Whether anything has happened since the game started: any life, commander
+  /// damage or counter changed. A new game would lose it.
+  bool get hasProgress =>
+      _life.any((l) => l != _startingLife) ||
+      _commanderDamage.any((row) => row.any((d) => d != 0)) ||
+      _counters.values.any((values) => values.any((v) => v != 0));
+
+  /// Who was picked to go first, while it's still being shown; cleared once
+  /// anyone touches the table. Not saved: it only matters at the start.
+  int? get startingPlayer => _startingPlayer;
+  int? _startingPlayer;
+
+  void clearStartingPlayer() {
+    if (_startingPlayer == null) return;
+    _startingPlayer = null;
+    notifyListeners();
+  }
+
   void newGame({
     required int playerCount,
     required int layoutIndex,
     required int startingLife,
+    int? startingPlayer,
   }) {
+    assert(startingPlayer == null || startingPlayer < playerCount);
     _start(playerCount, layoutIndex, startingLife);
+    _startingPlayer = startingPlayer;
     notifyListeners();
   }
 

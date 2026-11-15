@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../game/game.dart';
@@ -59,14 +61,41 @@ class _GameMenuDialogState extends State<GameMenuDialog>
     super.dispose();
   }
 
-  void _start() {
+  Future<void> _start() async {
+    // Starting over clears the current game, so check first, unless there's
+    // nothing to lose yet.
+    if (widget.game.hasProgress) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Start a new game?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              key: const ValueKey('confirm-start'),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Start'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
     widget.game.newGame(
       playerCount: _players,
       layoutIndex: _layout,
       startingLife: _life,
+      startingPlayer: widget.settings.randomStartingPlayer
+          ? _random.nextInt(_players)
+          : null,
     );
     Navigator.pop(context);
   }
+
+  final _random = Random();
 
   @override
   Widget build(BuildContext context) {
@@ -167,6 +196,18 @@ class _GameMenuDialogState extends State<GameMenuDialog>
           ],
           selected: {_life},
           onSelectionChanged: (s) => setState(() => _life = s.first),
+        ),
+        const SizedBox(height: 16),
+        // Unlike the choices above, this is remembered straight away; it
+        // takes effect each time Start is pressed.
+        ListenableBuilder(
+          listenable: widget.settings,
+          builder: (context, _) => SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Random starting player'),
+            value: widget.settings.randomStartingPlayer,
+            onChanged: widget.settings.setRandomStartingPlayer,
+          ),
         ),
       ],
     );
