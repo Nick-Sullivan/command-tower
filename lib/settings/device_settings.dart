@@ -4,10 +4,11 @@ import '../sound/sounds.dart';
 import '../widgets/skull.dart';
 import 'app_settings.dart';
 
-/// Sound on or off, then a sound for each moment: every − tap, every + tap,
-/// and a player being knocked out. Picking a sound plays it.
-class SoundSettings extends StatelessWidget {
-  const SoundSettings({super.key, required this.settings});
+/// How the phone behaves: sound, vibration and keeping the screen on, then a
+/// sound for each moment: losing life, gaining life, and a player being
+/// knocked out. Picking a sound plays it.
+class DeviceSettings extends StatelessWidget {
+  const DeviceSettings({super.key, required this.settings});
 
   final AppSettings settings;
 
@@ -31,6 +32,19 @@ class SoundSettings extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Vibration'),
+              value: settings.vibration,
+              onChanged: settings.setVibration,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Keep screen on'),
+              value: settings.keepScreenOn,
+              onChanged: settings.setKeepScreenOn,
+            ),
+            // Sound sits directly above the sounds it turns on.
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Sound'),

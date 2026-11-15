@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../sound/sounds.dart';
 
 /// Reveals who goes first: a highlight hops around the table in seat order,
 /// slowing down, and lands on [chosen], whose border then stays lit. Ignores
@@ -42,7 +42,7 @@ class _StartingPlayerSpinState extends State<StartingPlayerSpin> {
   /// [StartingPlayerSpin.duration].
   void _hop(int hop) {
     if (hop == _hops) {
-      HapticFeedback.lightImpact();
+      SoundScope.vibrate(context);
       setState(() => _landed = true);
       return;
     }

@@ -104,6 +104,18 @@ void main() {
     expect(settings.diceShown, [Die.d20]);
   });
 
+  test('vibration and keep screen on are on until turned off', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await AppSettings.open();
+    expect(settings.vibration, isTrue);
+    expect(settings.keepScreenOn, isTrue);
+    settings.setVibration(false);
+    settings.setKeepScreenOn(false);
+    final relaunched = await AppSettings.open();
+    expect(relaunched.vibration, isFalse);
+    expect(relaunched.keepScreenOn, isFalse);
+  });
+
   test('random starting player is off until turned on, and stays on', () async {
     SharedPreferences.setMockInitialValues({});
     final settings = await AppSettings.open();

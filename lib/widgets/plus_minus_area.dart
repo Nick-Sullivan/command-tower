@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../sound/sounds.dart';
 
@@ -48,10 +47,7 @@ class _PlusMinusAreaState extends State<PlusMinusArea> {
   Timer? _repeatTimer;
 
   void _apply(int change) {
-    // The keyboard-key click. selectionClick (a "tick") is lighter, but many
-    // phones play it at zero strength. Android still skips this when the user
-    // has touch feedback turned off.
-    HapticFeedback.lightImpact();
+    SoundScope.vibrate(context);
     if (widget.sound) {
       SoundScope.tap(context, widget.reverseSound ? -change.sign : change.sign);
     }

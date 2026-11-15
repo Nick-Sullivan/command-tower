@@ -90,6 +90,27 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  static const _vibrationKey = 'vibration';
+  static const _keepScreenOnKey = 'keepScreenOn';
+
+  /// The light click on every change. On unless turned off.
+  bool get vibration => _prefs.getBool(_vibrationKey) ?? true;
+
+  void setVibration(bool on) {
+    if (on == vibration) return;
+    _prefs.setBool(_vibrationKey, on);
+    notifyListeners();
+  }
+
+  /// Stops the screen sleeping mid-game. On unless turned off.
+  bool get keepScreenOn => _prefs.getBool(_keepScreenOnKey) ?? true;
+
+  void setKeepScreenOn(bool on) {
+    if (on == keepScreenOn) return;
+    _prefs.setBool(_keepScreenOnKey, on);
+    notifyListeners();
+  }
+
   /// Off until turned on: a phone at a quiet table shouldn't make noise.
   bool get soundOn => _prefs.getBool(_soundOnKey) ?? false;
 

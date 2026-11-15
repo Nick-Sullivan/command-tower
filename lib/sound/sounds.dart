@@ -1,4 +1,5 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../settings/app_settings.dart';
@@ -111,6 +112,16 @@ class SoundScope extends InheritedWidget {
   /// Plays the sound for a tap on the − ([sign] < 0) or + half.
   static void tap(BuildContext context, int sign) =>
       _play(context, sign < 0 ? SoundRole.minus : SoundRole.plus);
+
+  /// The light click for a change, unless vibration is turned off. It's the
+  /// keyboard-key click: selectionClick (a "tick") is lighter, but many phones
+  /// play it at zero strength. Android also skips it when the phone's own
+  /// touch feedback is off.
+  static void vibrate(BuildContext context) {
+    final scope = maybeOf(context);
+    if (scope != null && !scope.settings.vibration) return;
+    HapticFeedback.lightImpact();
+  }
 
   /// Plays the sound for a player being knocked out.
   static void knockedOut(BuildContext context) =>

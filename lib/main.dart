@@ -14,11 +14,15 @@ Future<void> main() async {
   // rotate, and system bars would only invite accidental swipes.
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  await WakelockPlus.enable();
   final store = await GameStore.open();
   final game = store.load();
   store.autosave(game);
   final settings = await AppSettings.open();
+  // Keep the screen on while the setting says so, following any change.
+  void applyKeepScreenOn() =>
+      WakelockPlus.toggle(enable: settings.keepScreenOn);
+  applyKeepScreenOn();
+  settings.addListener(applyKeepScreenOn);
   runApp(MyApp(game: game, settings: settings, sounds: AudioSoundPlayer()));
 }
 

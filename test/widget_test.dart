@@ -91,6 +91,32 @@ void main() {
     await _settle(tester);
   });
 
+  testWidgets('no haptic click once Vibration is turned off', (tester) async {
+    final haptics = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'HapticFeedback.vibrate') haptics.add(call);
+        return null;
+      },
+    );
+    await _pumpApp(tester);
+    await tester.tap(find.byIcon(Icons.settings));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Device'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Vibration'));
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    final rect = tester.getRect(_seat(_bottom));
+    await tester.tapAt(Offset(rect.left + rect.width / 4, rect.center.dy));
+    await tester.pump();
+    expect(_textInSeat(_bottom, '39'), findsOneWidget);
+    expect(haptics, isEmpty);
+    await _settle(tester);
+  });
+
   testWidgets('every change gives a light haptic tick', (tester) async {
     final haptics = <Object?>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -670,7 +696,7 @@ void main() {
       final settings = await _pumpApp(tester);
       await tester.tap(find.byIcon(Icons.settings));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Sound').last);
+      await tester.tap(find.text('Device'));
       await tester.pumpAndSettle();
       // The choices are there but greyed out until sound is on.
       final plusRow = find.byKey(const ValueKey(('sound', 'plus')));
@@ -681,7 +707,7 @@ void main() {
         ),
       );
       expect(plusMenu().enabled, isFalse);
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Sound'));
       await tester.pumpAndSettle();
       expect(plusMenu().enabled, isTrue);
 

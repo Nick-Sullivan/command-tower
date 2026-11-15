@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../sound/sounds.dart';
 
 import '../game/dice.dart';
 import '../settings/app_settings.dart';
@@ -142,7 +142,7 @@ class _DieButtonState extends State<_DieButton> {
       elapsed += _tumbleEvery;
       if (elapsed >= _tumbleFor) {
         timer.cancel();
-        HapticFeedback.lightImpact();
+        SoundScope.vibrate(context);
         setState(() {
           _rolling = false;
           _result = landing;

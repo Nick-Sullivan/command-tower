@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../game/game.dart';
 import '../game/layouts.dart';
 import '../settings/app_settings.dart';
-import '../settings/sound_settings.dart';
+import '../settings/device_settings.dart';
 import '../settings/tracking_settings.dart';
 import 'player_panel.dart';
 
@@ -110,7 +110,7 @@ class _GameMenuDialogState extends State<GameMenuDialog>
         tabs: const [
           Tab(text: 'New game'),
           Tab(text: 'Tracking'),
-          Tab(text: 'Sound'),
+          Tab(text: 'Device'),
         ],
       ),
       // New game waits for Start; the other tabs apply as you choose, so they
@@ -140,7 +140,7 @@ class _GameMenuDialogState extends State<GameMenuDialog>
             children: [
               _newGame(titleStyle, layouts),
               TrackingSettings(settings: widget.settings),
-              SoundSettings(settings: widget.settings),
+              DeviceSettings(settings: widget.settings),
             ],
           ),
         ),
