@@ -691,8 +691,8 @@ void main() {
       await tester.tapAt(Offset(rect.left + rect.width / 4, rect.center.dy));
       await tester.tapAt(Offset(rect.right - rect.width / 4, rect.center.dy));
       expect(_sounds.played, [
-        settings.sound(SoundRole.minus),
-        settings.sound(SoundRole.plus),
+        ...settings.sounds(SoundRole.minus),
+        ...settings.sounds(SoundRole.plus),
       ]);
 
       // Adding commander damage takes life away, so it plays the − sound.
@@ -710,7 +710,7 @@ void main() {
         ),
       );
       await tester.tapAt(Offset(area.right - area.width / 4, area.center.dy));
-      expect(_sounds.played.last, settings.sound(SoundRole.minus));
+      expect(_sounds.played.last, settings.sounds(SoundRole.minus).single);
       await _settle(tester);
     });
 
@@ -756,18 +756,13 @@ void main() {
       await gesture.up();
       await tester.tapAt(minus);
       await tester.pump();
-      // Once, or not at all while there are no knocked-out sounds (None is
-      // never played).
-      final knockOut = settings.sound(SoundRole.knockedOut);
-      expect(
-        _sounds.played.where((s) => s == knockOut),
-        hasLength(knockOut.isNone ? 0 : 1),
-      );
+      final knockOut = settings.sounds(SoundRole.knockedOut).single;
+      expect(_sounds.played.where((s) => s == knockOut), hasLength(1));
       expect(_sounds.played, isNot(contains(SoundChoice.none)));
       await _settle(tester);
     });
 
-    testWidgets('choosing a sound in the Sound tab plays and keeps it', (
+    testWidgets('ticking sounds in the Device tab plays and keeps them', (
       tester,
     ) async {
       final settings = await _pumpApp(tester);
@@ -775,43 +770,79 @@ void main() {
       await tester.pumpAndSettle();
       await _tapTab(tester, 'Device');
       await tester.pumpAndSettle();
-      // The choices are there but greyed out until sound is on.
+      // The row is there but greyed out until sound is on.
       final plusRow = find.byKey(const ValueKey(('sound', 'plus')));
-      DropdownMenu<SoundChoice> plusMenu() =>
-          tester.widget<DropdownMenu<SoundChoice>>(
-            find.descendant(
-              of: plusRow,
-              matching: find.byType(DropdownMenu<SoundChoice>),
-            ),
-          );
-      expect(plusMenu().enabled, isFalse);
+      bool enabled() => tester
+          .widget<InputDecorator>(
+            find.descendant(of: plusRow, matching: find.byType(InputDecorator)),
+          )
+          .decoration
+          .enabled;
+      expect(enabled(), isFalse);
+      await tester.tap(plusRow);
+      await tester.pumpAndSettle();
+      expect(find.byType(CheckboxMenuButton), findsNothing);
       await tester.tap(find.widgetWithText(SwitchListTile, 'Sound'));
       await tester.pumpAndSettle();
-      expect(plusMenu().enabled, isTrue);
+      expect(enabled(), isTrue);
 
       // Each row only offers its own kind of sound.
-      final offered = [for (final e in plusMenu().dropdownMenuEntries) e.value];
-      expect(offered, contains(Sound.phaserUp.choice));
-      expect(offered, isNot(contains(Sound.hurt.choice)));
+      await tester.tap(plusRow);
+      await tester.pumpAndSettle();
+      Finder entry(String label) =>
+          find.widgetWithText(CheckboxMenuButton, label);
+      expect(entry('Phaser up'), findsOneWidget);
+      expect(entry('Hurt'), findsNothing);
 
-      await tester.tap(
-        find.descendant(
-          of: plusRow,
-          matching: find.byType(DropdownMenu<SoundChoice>),
-        ),
+      // Ticking keeps the list open, to tick another.
+      await tester.tap(entry('Phaser up'));
+      await tester.pumpAndSettle();
+      await tester.tap(entry('Pickup'));
+      await tester.pumpAndSettle();
+      expect(settings.sounds(SoundRole.plus), [
+        Sound.doubleCoin.choice,
+        Sound.pickup.choice,
+        Sound.phaserUp.choice,
+      ]);
+      expect(_sounds.played, [Sound.phaserUp.choice, Sound.pickup.choice]);
+
+      // Unticking is silent; the field lists what's ticked.
+      await tester.tap(entry('Double coin'));
+      await tester.pumpAndSettle();
+      expect(_sounds.played, hasLength(2));
+      expect(
+        find.descendant(of: plusRow, matching: find.text('Pickup, Phaser up')),
+        findsOneWidget,
       );
+      await tester.tap(entry('Pickup'));
+      await tester.tap(entry('Phaser up'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Phaser up').last);
-      await tester.pumpAndSettle();
-      expect(settings.sound(SoundRole.plus), Sound.phaserUp.choice);
-      expect(_sounds.played, [Sound.phaserUp.choice]);
+      expect(settings.sounds(SoundRole.plus), isEmpty);
+      expect(
+        find.descendant(of: plusRow, matching: find.text('None')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a tap plays one of the ticked sounds', (tester) async {
+      final settings = await _pumpApp(tester);
+      settings
+        ..setSoundOn(true)
+        ..setSound(SoundRole.plus, Sound.rising.choice);
+      await tester.pump();
+      final rect = tester.getRect(_seat(_bottom));
+      for (var i = 0; i < 20; i++) {
+        await tester.tapAt(Offset(rect.right - rect.width / 4, rect.center.dy));
+      }
+      expect(_sounds.played.toSet(), {
+        Sound.doubleCoin.choice,
+        Sound.rising.choice,
+      });
+      await _settle(tester);
     });
 
     group('importing', () {
-      final plusMenu = find.descendant(
-        of: find.byKey(const ValueKey(('sound', 'plus'))),
-        matching: find.byType(DropdownMenu<SoundChoice>),
-      );
+      final plusMenu = find.byKey(const ValueKey(('sound', 'plus')));
 
       /// "Import…" and "Record…" are last in the list, which can scroll;
       /// bring the entry into view.
@@ -856,38 +887,81 @@ void main() {
         await tester.pumpAndSettle();
 
         const imported = SoundChoice.file('life points.mp3');
-        expect(settings.sound(SoundRole.plus), imported);
+        // Ticked alongside what was already ticked.
+        expect(settings.sounds(SoundRole.plus), [
+          Sound.doubleCoin.choice,
+          imported,
+        ]);
         expect(_sounds.played, [imported]);
         // The field shows it, and every row can now choose it.
         expect(
-          tester.widget<DropdownMenu<SoundChoice>>(plusMenu).initialSelection,
-          imported,
+          find.descendant(
+            of: plusMenu,
+            matching: find.text('Double coin, life points'),
+          ),
+          findsOneWidget,
         );
         expect(settings.soundChoices(SoundRole.minus), contains(imported));
       });
 
+      testWidgets('an imported sound can be deleted, once confirmed', (
+        tester,
+      ) async {
+        final settings = await openPlusMenu(tester, importing: 'Ouch.m4a');
+        await tapImport(tester);
+        await tester.tap(plusMenu);
+        await tester.pumpAndSettle();
+        // Only imported sounds can be deleted.
+        final delete = find.byKey(const ValueKey(('delete-sound', 'Ouch.m4a')));
+        expect(
+          find.descendant(
+            of: find.widgetWithText(CheckboxMenuButton, 'Double coin'),
+            matching: find.byIcon(Icons.delete_outline),
+          ),
+          findsNothing,
+        );
+
+        await tester.ensureVisible(delete);
+        await tester.pumpAndSettle();
+        await tester.tap(delete);
+        await tester.pumpAndSettle();
+        expect(find.text('Delete "Ouch"?'), findsOneWidget);
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(settings.importedSounds, ['Ouch.m4a']);
+        expect(_soundFiles.discarded, isEmpty);
+
+        await tester.tap(plusMenu);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(delete);
+        await tester.pumpAndSettle();
+        await tester.tap(delete);
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+        await tester.pumpAndSettle();
+        expect(settings.importedSounds, isEmpty);
+        expect(settings.sounds(SoundRole.plus), [Sound.doubleCoin.choice]);
+        expect(_soundFiles.discarded, ['Ouch.m4a']);
+      });
+
       testWidgets('backing out of the picker changes nothing', (tester) async {
         final settings = await openPlusMenu(tester);
-        final before = settings.sound(SoundRole.plus);
+        final before = settings.sounds(SoundRole.plus);
         await tapImport(tester);
         await tester.pumpAndSettle();
-        expect(settings.sound(SoundRole.plus), before);
+        expect(settings.sounds(SoundRole.plus), before);
         expect(settings.importedSounds, isEmpty);
-        expect(
-          tester.widget<DropdownMenu<SoundChoice>>(plusMenu).initialSelection,
-          before,
-        );
       });
 
       testWidgets('a file over 2 MB is turned away', (tester) async {
         final settings = await openPlusMenu(tester, tooBig: true);
-        final before = settings.sound(SoundRole.plus);
+        final before = settings.sounds(SoundRole.plus);
         await tapImport(tester);
         await tester.pumpAndSettle();
         expect(find.textContaining('too big'), findsOneWidget);
         await tester.tap(find.text('OK'));
         await tester.pumpAndSettle();
-        expect(settings.sound(SoundRole.plus), before);
+        expect(settings.sounds(SoundRole.plus), before);
         expect(settings.importedSounds, isEmpty);
       });
 
@@ -925,7 +999,7 @@ void main() {
 
           const kept = SoundChoice.file('Ouch.m4a');
           expect(settings.importedSounds, ['Ouch.m4a']);
-          expect(settings.sound(SoundRole.plus), kept);
+          expect(settings.sounds(SoundRole.plus), contains(kept));
           expect(_sounds.played.last, kept);
           expect(_soundFiles.discarded, isEmpty);
         });
@@ -975,13 +1049,13 @@ void main() {
 
         testWidgets('cancel keeps nothing', (tester) async {
           final settings = await openPlusMenu(tester);
-          final before = settings.sound(SoundRole.plus);
+          final before = settings.sounds(SoundRole.plus);
           await tapEntry(tester, 'Record…');
           await hold(tester, const Duration(seconds: 1));
           await tester.tap(find.text('Cancel'));
           await tester.pumpAndSettle();
           expect(settings.importedSounds, isEmpty);
-          expect(settings.sound(SoundRole.plus), before);
+          expect(settings.sounds(SoundRole.plus), before);
           expect(_soundFiles.discarded, ['.recording-1.m4a']);
         });
 

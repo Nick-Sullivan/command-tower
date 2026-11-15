@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -138,7 +140,10 @@ class AppSettings extends ChangeNotifier {
     SoundRole.knockedOut: Sound.fall,
   };
 
-  static String _soundKey(SoundRole role) => 'sound.${role.name}';
+  /// Where each role's sounds are saved. [_oldSoundKey] held the single sound
+  /// a role could have before several could be chosen.
+  static String _soundsKey(SoundRole role) => 'sounds.${role.name}';
+  static String _oldSoundKey(SoundRole role) => 'sound.${role.name}';
   static const _importedSoundsKey = 'importedSounds';
 
   /// Files the player has imported, oldest first.
@@ -151,26 +156,80 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// What [role] can play: silence, its built-in sounds, then every imported
-  /// sound (any of which suits any role).
+  /// Takes away an imported sound, and from every role that had it; a role
+  /// left with none is silent.
+  void removeImportedSound(String file) {
+    if (!importedSounds.contains(file)) return;
+    final sound = SoundChoice.file(file);
+    for (final role in SoundRole.values) {
+      final chosen = sounds(role);
+      if (!chosen.contains(sound)) continue;
+      _prefs.setStringList(_soundsKey(role), [
+        for (final s in chosen)
+          if (s != sound) s.id,
+      ]);
+    }
+    _prefs.setStringList(_importedSoundsKey, [
+      for (final f in importedSounds)
+        if (f != file) f,
+    ]);
+    notifyListeners();
+  }
+
+  /// What [role] can play: its built-in sounds, then every imported sound
+  /// (any of which suits any role).
   List<SoundChoice> soundChoices(SoundRole role) => [
     for (final s in Sound.forRole(role)) s.choice,
     for (final f in importedSounds) SoundChoice.file(f),
   ];
 
-  /// The sound chosen for [role]. A saved choice that's no longer offered
-  /// for it (e.g. from an older version) falls back to the default.
-  SoundChoice sound(SoundRole role) {
-    final id = _prefs.getString(_soundKey(role));
-    return soundChoices(role).where((s) => s.id == id).firstOrNull ??
-        _defaultSounds[role]!.choice;
+  /// The sounds chosen for [role], in the order they're offered; empty for
+  /// silence. Saved sounds that are no longer offered (e.g. from an older
+  /// version) are dropped, and if that leaves none, it's the default.
+  List<SoundChoice> sounds(SoundRole role) {
+    final ids =
+        _prefs.getStringList(_soundsKey(role)) ??
+        [?_prefs.getString(_oldSoundKey(role))];
+    if (ids.isEmpty) {
+      // Never chosen: the default. Chosen as nothing: silence.
+      return _prefs.containsKey(_soundsKey(role))
+          ? const []
+          : [_defaultSounds[role]!.choice];
+    }
+    // Silence used to be a sound of its own.
+    if (ids.every((id) => id == Sound.none.name)) return const [];
+    final chosen = [
+      for (final s in soundChoices(role))
+        if (ids.contains(s.id)) s,
+    ];
+    return chosen.isEmpty ? [_defaultSounds[role]!.choice] : chosen;
   }
 
-  void setSound(SoundRole role, SoundChoice sound) {
+  /// Adds [sound] to [role]'s sounds, or with [on] false takes it away.
+  void setSound(SoundRole role, SoundChoice sound, {bool on = true}) {
     assert(soundChoices(role).contains(sound));
-    if (sound == this.sound(role)) return;
-    _prefs.setString(_soundKey(role), sound.id);
+    final before = sounds(role);
+    if (before.contains(sound) == on) return;
+    final after = on ? [...before, sound] : ([...before]..remove(sound));
+    _prefs.setStringList(_soundsKey(role), [for (final s in after) s.id]);
     notifyListeners();
+  }
+
+  final _random = Random();
+  final _lastPlayed = <SoundRole, SoundChoice>{};
+
+  /// One of [role]'s sounds to play, at random, never the same one twice in
+  /// a row; null if it has none.
+  SoundChoice? nextSound(SoundRole role) {
+    final chosen = sounds(role);
+    if (chosen.isEmpty) return null;
+    final fresh = chosen.length > 1
+        ? [
+            for (final s in chosen)
+              if (s != _lastPlayed[role]) s,
+          ]
+        : chosen;
+    return _lastPlayed[role] = fresh[_random.nextInt(fresh.length)];
   }
 
   /// Counters turned on for every player, in a fixed order.

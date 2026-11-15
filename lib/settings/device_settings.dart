@@ -5,9 +5,9 @@ import '../widgets/skull.dart';
 import 'app_settings.dart';
 import 'record_sound_dialog.dart';
 
-/// How the phone behaves: sound, vibration and keeping the screen on, then a
-/// sound for each moment: losing life, gaining life, and a player being
-/// knocked out. Picking a sound plays it.
+/// How the phone behaves: sound, vibration and keeping the screen on, then
+/// the sounds for each moment: losing life, gaining life, and a player being
+/// knocked out. Ticking a sound plays it.
 class DeviceSettings extends StatelessWidget {
   const DeviceSettings({super.key, required this.settings});
 
@@ -20,16 +20,20 @@ class DeviceSettings extends StatelessWidget {
       builder: (context, _) {
         Widget row(SoundRole role, Widget icon) => Padding(
           padding: const EdgeInsets.only(top: 16),
-          child: _SoundChoice(
+          child: _SoundsField(
             key: ValueKey(('sound', role.name)),
             choices: settings.soundChoices(role),
             icon: icon,
             enabled: settings.soundOn,
-            selected: settings.sound(role),
-            onSelected: (s) => settings.setSound(role, s),
+            selected: settings.sounds(role),
+            onChanged: (s, on) => settings.setSound(role, s, on: on),
             onImported: (file) {
               settings.addImportedSound(file);
               settings.setSound(role, SoundChoice.file(file));
+            },
+            onDeleted: (file) {
+              settings.removeImportedSound(file);
+              SoundScope.maybeOf(context)?.files.discard(file);
             },
           ),
         );
@@ -86,18 +90,20 @@ class _SkullIcon extends StatelessWidget {
   }
 }
 
-/// One row's sound: a dropdown of its choices, with "Import…" and "Record…"
-/// last to add a sound file from the phone or the microphone. Picking a sound
-/// plays it.
-class _SoundChoice extends StatefulWidget {
-  const _SoundChoice({
+/// One row's sounds: a field showing the ones ticked, which opens a list to
+/// tick any number of them (one plays at random each time), with "Import…"
+/// and "Record…" last to add a sound from the phone or the microphone.
+/// Ticking a sound plays it.
+class _SoundsField extends StatefulWidget {
+  const _SoundsField({
     super.key,
     required this.choices,
     required this.icon,
     required this.enabled,
     required this.selected,
-    required this.onSelected,
+    required this.onChanged,
     required this.onImported,
+    required this.onDeleted,
   });
 
   final List<SoundChoice> choices;
@@ -105,24 +111,19 @@ class _SoundChoice extends StatefulWidget {
   /// What the row is for: −, + or a skull, shown inside the field.
   final Widget icon;
   final bool enabled;
-  final SoundChoice selected;
-  final ValueChanged<SoundChoice> onSelected;
+  final List<SoundChoice> selected;
+  final void Function(SoundChoice sound, bool on) onChanged;
   final ValueChanged<String> onImported;
 
+  /// An imported (or recorded) sound's file, deleted.
+  final ValueChanged<String> onDeleted;
+
   @override
-  State<_SoundChoice> createState() => _SoundChoiceState();
+  State<_SoundsField> createState() => _SoundsFieldState();
 }
 
-class _SoundChoiceState extends State<_SoundChoice> {
-  /// Stands in for the "Import…" entry; never saved or played.
-  static const _import = SoundChoice.file('\u0000import');
-
-  /// Likewise "Record…".
-  static const _record = SoundChoice.file('\u0000record');
-
-  /// Bumped to redraw the field after an import, so a cancelled one goes back
-  /// to showing the current sound.
-  int _redraws = 0;
+class _SoundsFieldState extends State<_SoundsField> {
+  final _menu = MenuController();
 
   Future<void> _importSound() async {
     final scope = SoundScope.maybeOf(context);
@@ -148,7 +149,28 @@ class _SoundChoiceState extends State<_SoundChoice> {
         ),
       );
     }
-    if (mounted) setState(() => _redraws++);
+  }
+
+  /// Deletes an imported sound, once the player confirms: there's no undo.
+  Future<void> _deleteSound(SoundChoice sound) async {
+    _menu.close();
+    final delete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "${sound.label}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (delete ?? false) widget.onDeleted(sound.file!);
   }
 
   Future<void> _recordSound() async {
@@ -164,48 +186,91 @@ class _SoundChoiceState extends State<_SoundChoice> {
       widget.onImported(file);
       scope.player.play(SoundChoice.file(file));
     }
-    if (mounted) setState(() => _redraws++);
   }
 
   @override
   Widget build(BuildContext context) {
-    // A dropdown rather than chips: each row has many sounds, and chips for
-    // all of them made the dialog taller than the screen.
-    return DropdownMenu<SoundChoice>(
-      // Rebuilt when the choice changes, so it always shows it.
-      key: ValueKey((widget.selected, _redraws)),
-      enabled: widget.enabled,
-      leadingIcon: widget.icon,
-      initialSelection: widget.selected,
-      expandedInsets: EdgeInsets.zero,
-      requestFocusOnTap: false,
-      dropdownMenuEntries: [
+    // A field with a list rather than chips: each row has many sounds, and
+    // chips for all of them made the dialog taller than the screen.
+    final selected = widget.selected;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // The list is as wide as the field: each entry is that wide.
+        final width = constraints.maxWidth;
+        final entry = ButtonStyle(
+          minimumSize: WidgetStatePropertyAll(Size(width, 48)),
+        );
+        return _menuAnchor(selected, width, entry);
+      },
+    );
+  }
+
+  Widget _menuAnchor(
+    List<SoundChoice> selected,
+    double width,
+    ButtonStyle entry,
+  ) {
+    return MenuAnchor(
+      controller: _menu,
+      style: MenuStyle(maximumSize: WidgetStatePropertyAll(Size(width, 360))),
+      menuChildren: [
         for (final sound in widget.choices)
-          DropdownMenuEntry(value: sound, label: sound.label),
-        const DropdownMenuEntry(
-          value: _import,
-          label: 'Import…',
-          leadingIcon: Icon(Icons.upload_file),
+          CheckboxMenuButton(
+            style: entry,
+            value: selected.contains(sound),
+            // Stays open, to tick several.
+            closeOnActivate: false,
+            onChanged: (on) {
+              widget.onChanged(sound, on ?? false);
+              if (on ?? false) {
+                SoundScope.maybeOf(context)?.player.play(sound);
+              }
+            },
+            // Imported and recorded sounds can be deleted, right there.
+            trailingIcon: sound.file == null
+                ? null
+                : IconButton(
+                    key: ValueKey(('delete-sound', sound.file!)),
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _deleteSound(sound),
+                  ),
+            child: Text(sound.label),
+          ),
+        MenuItemButton(
+          style: entry,
+          leadingIcon: const Icon(Icons.upload_file),
+          onPressed: _importSound,
+          child: const Text('Import…'),
         ),
-        const DropdownMenuEntry(
-          value: _record,
-          label: 'Record…',
-          leadingIcon: Icon(Icons.mic),
+        MenuItemButton(
+          style: entry,
+          leadingIcon: const Icon(Icons.mic),
+          onPressed: _recordSound,
+          child: const Text('Record…'),
         ),
       ],
-      onSelected: (sound) {
-        if (sound == null) return;
-        if (sound == _import) {
-          _importSound();
-          return;
-        }
-        if (sound == _record) {
-          _recordSound();
-          return;
-        }
-        widget.onSelected(sound);
-        SoundScope.maybeOf(context)?.player.play(sound);
-      },
+      builder: (context, menu, _) => InkWell(
+        onTap: widget.enabled
+            ? () => menu.isOpen ? menu.close() : menu.open()
+            : null,
+        borderRadius: BorderRadius.circular(4),
+        child: InputDecorator(
+          isFocused: menu.isOpen,
+          decoration: InputDecoration(
+            enabled: widget.enabled,
+            border: const OutlineInputBorder(),
+            prefixIcon: widget.icon,
+            suffixIcon: const Icon(Icons.arrow_drop_down),
+          ),
+          child: Text(
+            selected.isEmpty
+                ? Sound.none.label
+                : [for (final s in selected) s.label].join(', '),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
     );
   }
 }

@@ -51,9 +51,8 @@ enum Sound {
 
   String get asset => 'sounds/$_file';
 
-  /// The built-in choices for [role], silence first.
+  /// The built-in choices for [role]. Silence isn't one: it's choosing none.
   static List<Sound> forRole(SoundRole role) => [
-    none,
     for (final s in values)
       if (s.role == role) s,
   ];
@@ -229,8 +228,8 @@ class SoundScope extends InheritedWidget {
   static void _play(BuildContext context, SoundRole role) {
     final scope = maybeOf(context);
     if (scope == null || !scope.settings.soundOn) return;
-    final sound = scope.settings.sound(role);
-    if (!sound.isNone) scope.player.play(sound);
+    final sound = scope.settings.nextSound(role);
+    if (sound != null) scope.player.play(sound);
   }
 
   @override

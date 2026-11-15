@@ -32,17 +32,43 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final settings = await AppSettings.open();
     expect(settings.soundOn, isFalse);
-    expect(settings.sound(SoundRole.minus), Sound.hurt.choice);
-    expect(settings.sound(SoundRole.plus), Sound.doubleCoin.choice);
-    expect(settings.sound(SoundRole.knockedOut), Sound.fall.choice);
+    expect(settings.sounds(SoundRole.minus), [Sound.hurt.choice]);
+    expect(settings.sounds(SoundRole.plus), [Sound.doubleCoin.choice]);
+    expect(settings.sounds(SoundRole.knockedOut), [Sound.fall.choice]);
 
     settings.setSoundOn(true);
-    settings.setSound(SoundRole.minus, Sound.none.choice);
+    // Several at once, kept in the order they're offered; none is silence.
     settings.setSound(SoundRole.plus, Sound.phaserUp.choice);
+    settings.setSound(SoundRole.plus, Sound.pickup.choice);
+    settings.setSound(SoundRole.minus, Sound.hurt.choice, on: false);
     final relaunched = await AppSettings.open();
     expect(relaunched.soundOn, isTrue);
-    expect(relaunched.sound(SoundRole.minus), Sound.none.choice);
-    expect(relaunched.sound(SoundRole.plus), Sound.phaserUp.choice);
+    expect(relaunched.sounds(SoundRole.minus), isEmpty);
+    expect(relaunched.sounds(SoundRole.plus), [
+      Sound.doubleCoin.choice,
+      Sound.pickup.choice,
+      Sound.phaserUp.choice,
+    ]);
+    expect(relaunched.nextSound(SoundRole.minus), isNull);
+  });
+
+  test('plays one of the sounds at random, never twice running', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await AppSettings.open();
+    settings.setSound(SoundRole.plus, Sound.pickup.choice);
+    settings.setSound(SoundRole.plus, Sound.rising.choice);
+    final played = [
+      for (var i = 0; i < 60; i++) settings.nextSound(SoundRole.plus)!,
+    ];
+    expect(played.toSet(), settings.sounds(SoundRole.plus).toSet());
+    for (var i = 1; i < played.length; i++) {
+      expect(played[i], isNot(played[i - 1]));
+    }
+    // With just one, it's that one every time.
+    settings.setSound(SoundRole.plus, Sound.pickup.choice, on: false);
+    settings.setSound(SoundRole.plus, Sound.rising.choice, on: false);
+    expect(settings.nextSound(SoundRole.plus), Sound.doubleCoin.choice);
+    expect(settings.nextSound(SoundRole.plus), Sound.doubleCoin.choice);
   });
 
   test('imported sounds are offered for every role and remembered', () async {
@@ -55,14 +81,44 @@ void main() {
     }
     settings.setSound(SoundRole.minus, imported);
     final relaunched = await AppSettings.open();
-    expect(relaunched.sound(SoundRole.minus), imported);
+    expect(relaunched.sounds(SoundRole.minus), [Sound.hurt.choice, imported]);
     expect(imported.label, 'life points');
   });
 
-  test('a chosen sound file that is no longer imported falls back', () async {
-    SharedPreferences.setMockInitialValues({'sound.minus': 'file:gone.mp3'});
+  test('a deleted sound leaves every role that had it', () async {
+    SharedPreferences.setMockInitialValues({});
     final settings = await AppSettings.open();
-    expect(settings.sound(SoundRole.minus), Sound.hurt.choice);
+    const ouch = SoundChoice.file('Ouch.m4a');
+    settings
+      ..addImportedSound('Ouch.m4a')
+      ..setSound(SoundRole.minus, ouch)
+      ..setSound(SoundRole.knockedOut, ouch)
+      ..setSound(SoundRole.knockedOut, Sound.fall.choice, on: false);
+    settings.removeImportedSound('Ouch.m4a');
+    expect(settings.importedSounds, isEmpty);
+    expect(settings.sounds(SoundRole.minus), [Sound.hurt.choice]);
+    // It was the only one: now silent, not back to the default.
+    expect(settings.sounds(SoundRole.knockedOut), isEmpty);
+    expect(settings.soundChoices(SoundRole.plus), isNot(contains(ouch)));
+  });
+
+  test('the one sound saved by older versions carries over', () async {
+    SharedPreferences.setMockInitialValues({
+      'sound.minus': 'punch',
+      'sound.plus': 'none',
+    });
+    final settings = await AppSettings.open();
+    expect(settings.sounds(SoundRole.minus), [Sound.punch.choice]);
+    expect(settings.sounds(SoundRole.plus), isEmpty);
+    expect(settings.sounds(SoundRole.knockedOut), [Sound.fall.choice]);
+  });
+
+  test('a chosen sound file that is no longer imported falls back', () async {
+    SharedPreferences.setMockInitialValues({
+      'sounds.minus': ['file:gone.mp3'],
+    });
+    final settings = await AppSettings.open();
+    expect(settings.sounds(SoundRole.minus), [Sound.hurt.choice]);
   });
 
   test('a saved sound that is no longer offered falls back to default', () {
@@ -72,14 +128,15 @@ void main() {
       'sound.plus': 'youLose',
     });
     return AppSettings.open().then((settings) {
-      expect(settings.sound(SoundRole.minus), Sound.hurt.choice);
-      expect(settings.sound(SoundRole.plus), Sound.doubleCoin.choice);
+      expect(settings.sounds(SoundRole.minus), [Sound.hurt.choice]);
+      expect(settings.sounds(SoundRole.plus), [Sound.doubleCoin.choice]);
     });
   });
 
   test('every role has choices, and every sound its file', () {
     for (final role in SoundRole.values) {
       expect(Sound.forRole(role).length, greaterThan(1), reason: role.name);
+      expect(Sound.forRole(role), isNot(contains(Sound.none)));
     }
     for (final sound in Sound.values) {
       if (sound == Sound.none) continue;
