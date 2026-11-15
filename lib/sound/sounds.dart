@@ -147,7 +147,8 @@ const maxBytes = 2 * 1024 * 1024;
 
 /// Plays a sound. An interface so tests can listen in without audio.
 abstract interface class SoundPlayer {
-  void play(SoundChoice sound);
+  /// Plays [sound] at [volume], from 0 (silent) to 1 (as recorded).
+  void play(SoundChoice sound, {double volume = 1});
 }
 
 /// Plays through the device, with one low-latency player per sound. A sound
@@ -171,8 +172,8 @@ class AudioSoundPlayer implements SoundPlayer {
   );
 
   @override
-  Future<void> play(SoundChoice sound) async {
-    if (sound.isNone) return;
+  Future<void> play(SoundChoice sound, {double volume = 1}) async {
+    if (sound.isNone || volume <= 0) return;
     final player = _players[sound] ??= AudioPlayer()
       ..setAudioContext(_context)
       ..setPlayerMode(PlayerMode.lowLatency)
@@ -183,6 +184,7 @@ class AudioSoundPlayer implements SoundPlayer {
       file == null
           ? AssetSource(sound.builtIn!.asset)
           : DeviceFileSource(_files.path(file)),
+      volume: volume,
     );
   }
 }
@@ -229,7 +231,9 @@ class SoundScope extends InheritedWidget {
     final scope = maybeOf(context);
     if (scope == null || !scope.settings.soundOn) return;
     final sound = scope.settings.nextSound(role);
-    if (sound != null) scope.player.play(sound);
+    if (sound != null) {
+      scope.player.play(sound, volume: scope.settings.soundVolume(role));
+    }
   }
 
   @override

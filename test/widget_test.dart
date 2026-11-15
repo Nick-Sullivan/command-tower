@@ -22,9 +22,13 @@ Finder _textInSeat(int i, String text) =>
 /// Records what would have played, instead of playing it.
 class _FakeSounds implements SoundPlayer {
   final played = <SoundChoice>[];
+  final volumes = <double>[];
 
   @override
-  void play(SoundChoice sound) => played.add(sound);
+  void play(SoundChoice sound, {double volume = 1}) {
+    played.add(sound);
+    volumes.add(volume);
+  }
 }
 
 /// Stands in for the phone's file picker: [next] is what the next import
@@ -822,6 +826,46 @@ void main() {
         find.descendant(of: plusRow, matching: find.text('None')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('each row has its own volume, under its sounds', (
+      tester,
+    ) async {
+      final settings = await _pumpApp(tester);
+      settings.setSoundOn(true);
+      await tester.tap(find.byIcon(Icons.settings));
+      await tester.pumpAndSettle();
+      await _tapTab(tester, 'Device');
+      await tester.pumpAndSettle();
+      final slider = find.byKey(const ValueKey(('volume', 'minus')));
+      final field = find.byKey(const ValueKey(('sound', 'minus')));
+      final next = find.byKey(const ValueKey(('sound', 'plus')));
+      // Between its own row and the next.
+      expect(
+        tester.getRect(slider).top,
+        greaterThan(tester.getRect(field).top),
+      );
+      expect(tester.getRect(slider).top, lessThan(tester.getRect(next).top));
+
+      // Dragging to the far left; letting go plays a sound at that volume.
+      final rect = tester.getRect(slider);
+      await tester.dragFrom(rect.center, Offset(-rect.width, 0));
+      await tester.pumpAndSettle();
+      expect(settings.soundVolume(SoundRole.minus), 0);
+      expect(settings.soundVolume(SoundRole.plus), 1);
+      expect(_sounds.volumes.last, 0);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      // In the game, that row plays at its volume; the others at theirs.
+      settings.setSoundVolume(SoundRole.minus, 0.4);
+      _sounds.played.clear();
+      _sounds.volumes.clear();
+      final seat = tester.getRect(_seat(_bottom));
+      await tester.tapAt(Offset(seat.left + seat.width / 4, seat.center.dy));
+      await tester.tapAt(Offset(seat.right - seat.width / 4, seat.center.dy));
+      expect(_sounds.volumes, [0.4, 1]);
+      await _settle(tester);
     });
 
     testWidgets('a tap plays one of the ticked sounds', (tester) async {

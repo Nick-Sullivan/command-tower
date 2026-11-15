@@ -48,11 +48,11 @@ class DeviceSoundFiles implements SoundFiles {
 
   @override
   String newRecording() =>
-      '$_recordingPrefix${DateTime.now().microsecondsSinceEpoch}.m4a';
+      '$_recordingPrefix${DateTime.now().microsecondsSinceEpoch}.wav';
 
   @override
   Future<String> keepRecording(String file, String name) async {
-    final kept = _unusedName('${safeFileName(name)}.m4a');
+    final kept = _unusedName('${safeFileName(name)}.wav');
     await File(path(file)).rename(path(kept));
     return kept;
   }

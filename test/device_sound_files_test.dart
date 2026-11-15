@@ -20,12 +20,12 @@ void main() {
   }
 
   test('a kept recording is named, never over another sound', () async {
-    expect(await files.keepRecording(await record(), 'Ouch'), 'Ouch.m4a');
-    expect(await files.keepRecording(await record(), 'Ouch'), 'Ouch (2).m4a');
+    expect(await files.keepRecording(await record(), 'Ouch'), 'Ouch.wav');
+    expect(await files.keepRecording(await record(), 'Ouch'), 'Ouch (2).wav');
     // Only the kept sounds are left: the recordings were moved, not copied.
     expect(dir.listSync().map((f) => f.uri.pathSegments.last).toSet(), {
-      'Ouch.m4a',
-      'Ouch (2).m4a',
+      'Ouch.wav',
+      'Ouch (2).wav',
     });
   });
 
@@ -40,7 +40,7 @@ void main() {
     final left = await record();
     await files.discardUnkept();
     expect(File(files.path(left)).existsSync(), isFalse);
-    expect(File(files.path('Ouch.m4a')).existsSync(), isTrue);
+    expect(File(files.path('Ouch.wav')).existsSync(), isTrue);
   });
 
   test('a discarded recording is deleted', () async {

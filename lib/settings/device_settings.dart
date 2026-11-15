@@ -18,23 +18,12 @@ class DeviceSettings extends StatelessWidget {
     return ListenableBuilder(
       listenable: settings,
       builder: (context, _) {
+        // Each row's sounds, with how loud they play right under them.
         Widget row(SoundRole role, Widget icon) => Padding(
           padding: const EdgeInsets.only(top: 16),
-          child: _SoundsField(
-            key: ValueKey(('sound', role.name)),
-            choices: settings.soundChoices(role),
-            icon: icon,
-            enabled: settings.soundOn,
-            selected: settings.sounds(role),
-            onChanged: (s, on) => settings.setSound(role, s, on: on),
-            onImported: (file) {
-              settings.addImportedSound(file);
-              settings.setSound(role, SoundChoice.file(file));
-            },
-            onDeleted: (file) {
-              settings.removeImportedSound(file);
-              SoundScope.maybeOf(context)?.files.discard(file);
-            },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [_field(context, role, icon), _volume(context, role)],
           ),
         );
         return Column(
@@ -68,6 +57,59 @@ class DeviceSettings extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  Widget _field(BuildContext context, SoundRole role, Widget icon) {
+    return _SoundsField(
+      key: ValueKey(('sound', role.name)),
+      choices: settings.soundChoices(role),
+      icon: icon,
+      enabled: settings.soundOn,
+      selected: settings.sounds(role),
+      volume: settings.soundVolume(role),
+      onChanged: (s, on) => settings.setSound(role, s, on: on),
+      onImported: (file) {
+        settings.addImportedSound(file);
+        settings.setSound(role, SoundChoice.file(file));
+      },
+      onDeleted: (file) {
+        settings.removeImportedSound(file);
+        SoundScope.maybeOf(context)?.files.discard(file);
+      },
+    );
+  }
+
+  /// How loud the row's sounds play. Letting go plays one at that volume.
+  Widget _volume(BuildContext context, SoundRole role) {
+    final enabled = settings.soundOn;
+    return Row(
+      children: [
+        Padding(
+          // Lined up with the field's icon above.
+          padding: const EdgeInsets.only(left: 12),
+          child: Icon(
+            Icons.volume_up,
+            size: 20,
+            color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(
+              alpha: enabled ? 1 : 0.38,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Slider(
+            key: ValueKey(('volume', role.name)),
+            value: settings.soundVolume(role),
+            onChanged: enabled ? (v) => settings.setSoundVolume(role, v) : null,
+            onChangeEnd: (v) {
+              final sound = settings.nextSound(role);
+              if (sound != null) {
+                SoundScope.maybeOf(context)?.player.play(sound, volume: v);
+              }
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -104,6 +146,7 @@ class _SoundsField extends StatefulWidget {
     required this.onChanged,
     required this.onImported,
     required this.onDeleted,
+    required this.volume,
   });
 
   final List<SoundChoice> choices;
@@ -112,6 +155,10 @@ class _SoundsField extends StatefulWidget {
   final Widget icon;
   final bool enabled;
   final List<SoundChoice> selected;
+
+  /// How loud the row's sounds play, so a sound heard on ticking it sounds
+  /// as it will in the game.
+  final double volume;
   final void Function(SoundChoice sound, bool on) onChanged;
   final ValueChanged<String> onImported;
 
@@ -132,7 +179,7 @@ class _SoundsFieldState extends State<_SoundsField> {
       final file = await scope.files.import();
       if (file != null) {
         widget.onImported(file);
-        scope.player.play(SoundChoice.file(file));
+        scope.player.play(SoundChoice.file(file), volume: widget.volume);
       }
     } on SoundTooBig {
       if (!mounted) return;
@@ -184,7 +231,7 @@ class _SoundsFieldState extends State<_SoundsField> {
     final file = await RecordSoundDialog.show(context, name: 'Recording $n');
     if (file != null) {
       widget.onImported(file);
-      scope.player.play(SoundChoice.file(file));
+      scope.player.play(SoundChoice.file(file), volume: widget.volume);
     }
   }
 
@@ -223,7 +270,9 @@ class _SoundsFieldState extends State<_SoundsField> {
             onChanged: (on) {
               widget.onChanged(sound, on ?? false);
               if (on ?? false) {
-                SoundScope.maybeOf(context)?.player.play(sound);
+                SoundScope.maybeOf(
+                  context,
+                )?.player.play(sound, volume: widget.volume);
               }
             },
             // Imported and recorded sounds can be deleted, right there.

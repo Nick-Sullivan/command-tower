@@ -215,6 +215,18 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  static String _volumeKey(SoundRole role) => 'volume.${role.name}';
+
+  /// How loud [role]'s sounds play, from 0 (silent) to 1 (full).
+  double soundVolume(SoundRole role) => _prefs.getDouble(_volumeKey(role)) ?? 1;
+
+  void setSoundVolume(SoundRole role, double volume) {
+    final clamped = volume.clamp(0.0, 1.0);
+    if (clamped == soundVolume(role)) return;
+    _prefs.setDouble(_volumeKey(role), clamped);
+    notifyListeners();
+  }
+
   final _random = Random();
   final _lastPlayed = <SoundRole, SoundChoice>{};
 

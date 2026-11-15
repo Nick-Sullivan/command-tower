@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:record/record.dart';
 
 import 'sounds.dart';
+import 'wav_trim.dart';
 
-/// Records from the phone's microphone, as AAC in an .m4a file.
+/// Records from the phone's microphone, as a WAV file with the quiet start
+/// (before the player makes their sound) cut off.
 class DeviceSoundRecorder implements SoundRecorder {
   final _recorder = AudioRecorder();
 
@@ -11,12 +15,22 @@ class DeviceSoundRecorder implements SoundRecorder {
 
   @override
   Future<void> start(String path) => _recorder.start(
-    const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1),
+    const RecordConfig(
+      encoder: AudioEncoder.wav,
+      numChannels: 1,
+      sampleRate: 44100,
+    ),
     path: path,
   );
 
   @override
-  Future<void> stop() => _recorder.stop();
+  Future<void> stop() async {
+    final path = await _recorder.stop();
+    if (path == null) return;
+    final file = File(path);
+    final trimmed = trimLeadingSilence(await file.readAsBytes());
+    await file.writeAsBytes(trimmed, flush: true);
+  }
 
   @override
   Future<void> cancel() => _recorder.cancel();
