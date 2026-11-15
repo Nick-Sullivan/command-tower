@@ -1,4 +1,4 @@
-name: mtg_life_tracker
+name: command_tower
 description: "Magic: The Gathering life tracker."
 publish_to: 'none'
 version: 0.1.0

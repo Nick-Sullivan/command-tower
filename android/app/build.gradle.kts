@@ -17,7 +17,7 @@ val keystoreProperties = Properties().apply {
 val hasReleaseKeystore = keystoreProperties.containsKey("storeFile")
 
 android {
-    namespace = "com.nicksullivan.mtg_life_tracker"
+    namespace = "com.nicksullivan.command_tower"
     // Pinned to satisfy Google Play's Aug 2026 target-API requirement (API 36).
     // Overrides Flutter 3.32.8's default (35) so the level doesn't track Flutter.
     compileSdk = 36
@@ -33,7 +33,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.nicksullivan.mtg_life_tracker"
+        applicationId = "com.nicksullivan.command_tower"
         // Play's automatic protection requires API 24+; Flutter 3.32.8's
         // default (21) would block it.
         minSdk = 24

@@ -7,7 +7,7 @@ screenshots.
 
 ## App name (30 chars max)
 
-    MTG Life Tracker
+    Command Tower
 
 ## Short description (80 chars max)
 
@@ -27,7 +27,7 @@ Wizards of the Coast. ™ & © Wizards of the Coast.
 - Ads: No ads
 - Data safety: No data collected, no data shared
 - Content rating questionnaire: reference/utility app → Everyone
-- Privacy policy URL: https://<your-github-username>.github.io/mtg-life-tracker/privacy-policy.html
+- Privacy policy URL: https://<your-github-username>.github.io/command-tower/privacy-policy.html
   (enable GitHub Pages: repo Settings → Pages → Deploy from branch → main,
   folder /docs — then fill in the contact email placeholder in
   docs/privacy-policy.html)

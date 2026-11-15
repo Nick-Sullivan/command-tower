@@ -1,4 +1,4 @@
-package com.nicksullivan.mtg_life_tracker
+package com.nicksullivan.command_tower
 
 import io.flutter.embedding.android.FlutterActivity
 

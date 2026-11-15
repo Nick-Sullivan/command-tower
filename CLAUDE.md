@@ -1,4 +1,4 @@
-# mtg_life_tracker
+# command_tower
 
 ## UI design
 Design a control before writing it. Words, placement and appearance are the

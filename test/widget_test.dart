@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:mtg_life_tracker/main.dart';
+import 'package:command_tower/main.dart';
 
 void main() {
   testWidgets('shows Hello World', (tester) async {

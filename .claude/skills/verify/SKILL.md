@@ -3,7 +3,7 @@ name: verify
 description: How to smoke-test this app end-to-end on the Android emulator — build/launch/drive recipe and gotchas.
 ---
 
-# Verifying mtg_life_tracker on a device
+# Verifying command_tower on a device
 
 Android is the primary surface (no windows/ or web/ targets). Real surface =
 Android emulator.
@@ -17,7 +17,7 @@ flutter run -d emulator-5554 --debug
 ```
 
 adb lives at `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe` (not on PATH).
-Package id: `com.nicksullivan.mtg_life_tracker`.
+Package id: `com.nicksullivan.command_tower`.
 
 An emulator is usually already running. Check `adb devices` via that full
 path before launching one, and never conclude "no emulator" from a bare `adb`
