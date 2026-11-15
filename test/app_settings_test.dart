@@ -32,17 +32,37 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final settings = await AppSettings.open();
     expect(settings.soundOn, isFalse);
-    expect(settings.sound(SoundRole.minus), Sound.hurt);
-    expect(settings.sound(SoundRole.plus), Sound.doubleCoin);
-    expect(settings.sound(SoundRole.knockedOut), Sound.fall);
+    expect(settings.sound(SoundRole.minus), Sound.hurt.choice);
+    expect(settings.sound(SoundRole.plus), Sound.doubleCoin.choice);
+    expect(settings.sound(SoundRole.knockedOut), Sound.fall.choice);
 
     settings.setSoundOn(true);
-    settings.setSound(SoundRole.minus, Sound.none);
-    settings.setSound(SoundRole.plus, Sound.phaserUp);
+    settings.setSound(SoundRole.minus, Sound.none.choice);
+    settings.setSound(SoundRole.plus, Sound.phaserUp.choice);
     final relaunched = await AppSettings.open();
     expect(relaunched.soundOn, isTrue);
-    expect(relaunched.sound(SoundRole.minus), Sound.none);
-    expect(relaunched.sound(SoundRole.plus), Sound.phaserUp);
+    expect(relaunched.sound(SoundRole.minus), Sound.none.choice);
+    expect(relaunched.sound(SoundRole.plus), Sound.phaserUp.choice);
+  });
+
+  test('imported sounds are offered for every role and remembered', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = await AppSettings.open();
+    settings.addImportedSound('life points.mp3');
+    const imported = SoundChoice.file('life points.mp3');
+    for (final role in SoundRole.values) {
+      expect(settings.soundChoices(role).last, imported, reason: role.name);
+    }
+    settings.setSound(SoundRole.minus, imported);
+    final relaunched = await AppSettings.open();
+    expect(relaunched.sound(SoundRole.minus), imported);
+    expect(imported.label, 'life points');
+  });
+
+  test('a chosen sound file that is no longer imported falls back', () async {
+    SharedPreferences.setMockInitialValues({'sound.minus': 'file:gone.mp3'});
+    final settings = await AppSettings.open();
+    expect(settings.sound(SoundRole.minus), Sound.hurt.choice);
   });
 
   test('a saved sound that is no longer offered falls back to default', () {
@@ -52,8 +72,8 @@ void main() {
       'sound.plus': 'youLose',
     });
     return AppSettings.open().then((settings) {
-      expect(settings.sound(SoundRole.minus), Sound.hurt);
-      expect(settings.sound(SoundRole.plus), Sound.doubleCoin);
+      expect(settings.sound(SoundRole.minus), Sound.hurt.choice);
+      expect(settings.sound(SoundRole.plus), Sound.doubleCoin.choice);
     });
   });
 

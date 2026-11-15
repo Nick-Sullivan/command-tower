@@ -69,6 +69,8 @@ class PlayerPanel extends StatefulWidget {
     this.onCounterChange,
     this.turnElapsed,
     this.onEndTurn,
+    this.turnWaiting = false,
+    this.onStartTurn,
   });
 
   final int life;
@@ -98,6 +100,13 @@ class PlayerPanel extends StatefulWidget {
   /// the button that ends the turn.
   final ValueGetter<Duration>? turnElapsed;
   final VoidCallback? onEndTurn;
+
+  /// Whether the first turn is waiting to be started, and this player may
+  /// start it: the pill says "Push to start". Outlined only if it's already
+  /// known to be their turn ([turnElapsed] set); otherwise whoever pushes
+  /// first goes first.
+  final bool turnWaiting;
+  final VoidCallback? onStartTurn;
 
   @override
   State<PlayerPanel> createState() => _PlayerPanelState();
@@ -458,7 +467,8 @@ class _PlayerPanelState extends State<PlayerPanel> {
                   if (widget.commanderDamage) _swordsButton(barHeight),
                   for (final cv in widget.counters)
                     _counterButton(cv, barHeight),
-                  if (turnElapsed != null) _turnPill(turnElapsed, barHeight),
+                  if (turnElapsed != null || widget.turnWaiting)
+                    _turnPill(turnElapsed, barHeight),
                 ],
               ),
             ),
@@ -501,16 +511,24 @@ class _PlayerPanelState extends State<PlayerPanel> {
 
   /// The turn: how long it's been going, and ending it, in one solid pill
   /// so the time and the button that resets it are together. The whole pill
-  /// ends the turn.
-  Widget _turnPill(ValueGetter<Duration> elapsed, double barHeight) {
+  /// ends the turn. Before the first turn begins, it says "Push to start" and
+  /// starts the clock instead.
+  Widget _turnPill(ValueGetter<Duration>? elapsed, double barHeight) {
     final height = (barHeight * 0.75).clamp(36.0, 48.0);
     final foreground = widget.color;
+    final waiting = widget.turnWaiting;
+    final style = TextStyle(
+      color: foreground,
+      fontSize: height * 0.5,
+      fontWeight: FontWeight.w700,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     return GestureDetector(
-      key: const ValueKey('end-turn'),
+      key: ValueKey(waiting ? 'start-turn' : 'end-turn'),
       behavior: HitTestBehavior.opaque,
       onTap: () {
         SoundScope.vibrate(context);
-        widget.onEndTurn?.call();
+        (waiting ? widget.onStartTurn : widget.onEndTurn)?.call();
       },
       child: Container(
         height: barHeight,
@@ -528,15 +546,10 @@ class _PlayerPanelState extends State<PlayerPanel> {
             children: [
               Icon(Icons.timer, size: height * 0.5, color: foreground),
               SizedBox(width: height * 0.15),
-              TurnClock(
-                elapsed: elapsed,
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: height * 0.5,
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
+              if (waiting || elapsed == null)
+                Text('Push to start', style: style)
+              else
+                TurnClock(elapsed: elapsed, style: style),
               SizedBox(width: height * 0.15),
             ],
           ),

@@ -21,11 +21,15 @@ class DeviceSettings extends StatelessWidget {
           padding: const EdgeInsets.only(top: 16),
           child: _SoundChoice(
             key: ValueKey(('sound', role.name)),
-            role: role,
+            choices: settings.soundChoices(role),
             icon: icon,
             enabled: settings.soundOn,
             selected: settings.sound(role),
             onSelected: (s) => settings.setSound(role, s),
+            onImported: (file) {
+              settings.addImportedSound(file);
+              settings.setSound(role, SoundChoice.file(file));
+            },
           ),
         );
         return Column(
@@ -81,43 +85,95 @@ class _SkullIcon extends StatelessWidget {
   }
 }
 
-class _SoundChoice extends StatelessWidget {
+/// One row's sound: a dropdown of its choices, with "Import…" last to add a
+/// sound file from the phone. Picking a sound plays it.
+class _SoundChoice extends StatefulWidget {
   const _SoundChoice({
     super.key,
-    required this.role,
+    required this.choices,
     required this.icon,
     required this.enabled,
     required this.selected,
     required this.onSelected,
+    required this.onImported,
   });
 
-  final SoundRole role;
+  final List<SoundChoice> choices;
 
   /// What the row is for: −, + or a skull, shown inside the field.
   final Widget icon;
   final bool enabled;
-  final Sound selected;
-  final ValueChanged<Sound> onSelected;
+  final SoundChoice selected;
+  final ValueChanged<SoundChoice> onSelected;
+  final ValueChanged<String> onImported;
+
+  @override
+  State<_SoundChoice> createState() => _SoundChoiceState();
+}
+
+class _SoundChoiceState extends State<_SoundChoice> {
+  /// Stands in for the "Import…" entry; never saved or played.
+  static const _import = SoundChoice.file('\u0000import');
+
+  /// Bumped to redraw the field after an import, so a cancelled one goes back
+  /// to showing the current sound.
+  int _redraws = 0;
+
+  Future<void> _importSound() async {
+    final scope = SoundScope.maybeOf(context);
+    if (scope == null) return;
+    try {
+      final file = await scope.files.import();
+      if (file != null) {
+        widget.onImported(file);
+        scope.player.play(SoundChoice.file(file));
+      }
+    } on SoundTooBig {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          content: const Text('That file is too big. Pick one under 2 MB.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (mounted) setState(() => _redraws++);
+  }
 
   @override
   Widget build(BuildContext context) {
     // A dropdown rather than chips: each row has many sounds, and chips for
     // all of them made the dialog taller than the screen.
-    return DropdownMenu<Sound>(
+    return DropdownMenu<SoundChoice>(
       // Rebuilt when the choice changes, so it always shows it.
-      key: ValueKey(selected),
-      enabled: enabled,
-      leadingIcon: icon,
-      initialSelection: selected,
+      key: ValueKey((widget.selected, _redraws)),
+      enabled: widget.enabled,
+      leadingIcon: widget.icon,
+      initialSelection: widget.selected,
       expandedInsets: EdgeInsets.zero,
       requestFocusOnTap: false,
       dropdownMenuEntries: [
-        for (final sound in Sound.forRole(role))
+        for (final sound in widget.choices)
           DropdownMenuEntry(value: sound, label: sound.label),
+        const DropdownMenuEntry(
+          value: _import,
+          label: 'Import…',
+          leadingIcon: Icon(Icons.upload_file),
+        ),
       ],
       onSelected: (sound) {
         if (sound == null) return;
-        onSelected(sound);
+        if (sound == _import) {
+          _importSound();
+          return;
+        }
+        widget.onSelected(sound);
         SoundScope.maybeOf(context)?.player.play(sound);
       },
     );

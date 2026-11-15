@@ -30,9 +30,11 @@ class GameScreen extends StatelessWidget {
             final seats = game.layout.seats;
             final counters = settings.counters;
             // With the turn timer on, turns start as soon as the table shows:
-            // straight away, or when a new game begins.
+            // straight away, or when a new game begins. While a random
+            // starting player is being revealed, they wait for it to land (or
+            // be skipped), so the timer doesn't give the pick away.
             final turns = settings.turnTimer;
-            if (turns && game.turnPlayer == null) {
+            if (turns && !game.turnsStarted && game.startingPlayer == null) {
               WidgetsBinding.instance.addPostFrameCallback(
                 (_) => game.startTurns(),
               );
@@ -89,6 +91,13 @@ class GameScreen extends StatelessWidget {
                               onEndTurn: turns && game.turnPlayer == i
                                   ? game.endTurn
                                   : null,
+                              // Before the first turn: the picked player, or
+                              // with nobody picked, everyone, can start it.
+                              turnWaiting:
+                                  turns &&
+                                  game.turnWaiting &&
+                                  (game.turnPlayer ?? i) == i,
+                              onStartTurn: () => game.beginTurn(i),
                               counters: [
                                 for (final c in counters)
                                   CounterValue(c, game.counter(c, i)),
@@ -139,6 +148,7 @@ class GameScreen extends StatelessWidget {
                           key: ValueKey(('starting-player', game.generation)),
                           seatRects: rects,
                           chosen: startingPlayer,
+                          onLanded: turns ? game.startTurns : null,
                         ),
                     ],
                   ),

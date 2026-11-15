@@ -142,24 +142,54 @@ void main() {
   });
 
   group('turns', () {
-    test('start with the starting player, or the first seat', () {
-      final game = Game();
-      game.startTurns();
-      expect(game.turnPlayer, 0);
-      game.newGame(
-        playerCount: 4,
-        layoutIndex: 0,
-        startingLife: 40,
-        startingPlayer: 2,
-      );
-      // A new game stops turns until they're started again.
-      expect(game.turnPlayer, isNull);
-      game.startTurns();
+    test('with nobody picked, whoever begins the first turn goes first', () {
+      var now = DateTime(2026, 1, 1, 20);
+      withClock(Clock(() => now), () {
+        final game = Game()..startTurns();
+        expect(game.turnsStarted, isTrue);
+        expect(game.turnWaiting, isTrue);
+        expect(game.turnPlayer, isNull);
+        now = now.add(const Duration(minutes: 2));
+        expect(game.turnElapsed, Duration.zero);
+        game.beginTurn(2);
+        expect(game.turnWaiting, isFalse);
+        expect(game.turnPlayer, 2);
+        expect(game.turnStarted, now);
+        expect(game.turnCount(2), 1);
+        // Only the first turn is begun this way.
+        game.beginTurn(0);
+        expect(game.turnPlayer, 2);
+      });
+    });
+
+    test('with a player picked, only they can begin the first turn', () {
+      final game = Game()
+        ..newGame(
+          playerCount: 4,
+          layoutIndex: 0,
+          startingLife: 40,
+          startingPlayer: 2,
+        )
+        ..startTurns();
       expect(game.turnPlayer, 2);
+      expect(game.turnWaiting, isTrue);
+      // Still waiting for them after a save and restore.
+      expect(Game.fromJson(game.toJson())!.turnWaiting, isTrue);
+      game.beginTurn(1);
+      expect(game.turnWaiting, isTrue);
+      game.beginTurn(2);
+      expect(game.turnWaiting, isFalse);
+
+      // A new game stops turns until they're started again.
+      game.newGame(playerCount: 4, layoutIndex: 0, startingLife: 40);
+      expect(game.turnsStarted, isFalse);
+      expect(game.turnPlayer, isNull);
     });
 
     test('pass clockwise, skipping knocked-out players', () {
-      final game = Game()..startTurns();
+      final game = Game()
+        ..startTurns()
+        ..beginTurn(0);
       game.endTurn();
       expect(game.turnPlayer, 1);
       game.changeLife(2, -40);
@@ -171,11 +201,15 @@ void main() {
 
     test('each turn restarts the time', () {
       withClock(Clock.fixed(DateTime(2026, 1, 1, 20)), () {
-        final game = Game()..startTurns();
+        final game = Game()
+          ..startTurns()
+          ..beginTurn(0);
         expect(game.turnStarted, DateTime(2026, 1, 1, 20));
       });
       withClock(Clock.fixed(DateTime(2026, 1, 1, 20, 3)), () {
-        final game = Game()..startTurns();
+        final game = Game()
+          ..startTurns()
+          ..beginTurn(0);
         game.endTurn();
         expect(game.turnStarted, DateTime(2026, 1, 1, 20, 3));
       });
@@ -184,7 +218,9 @@ void main() {
     test('pausing stops the turn time until it resumes', () {
       var now = DateTime(2026, 1, 1, 20);
       withClock(Clock(() => now), () {
-        final game = Game()..startTurns();
+        final game = Game()
+          ..startTurns()
+          ..beginTurn(0);
         now = now.add(const Duration(seconds: 30));
         game.pauseTurn();
         now = now.add(const Duration(minutes: 5));
@@ -198,7 +234,9 @@ void main() {
     test('counts each player\'s turns and their time', () {
       var now = DateTime(2026, 1, 1, 20);
       withClock(Clock(() => now), () {
-        final game = Game(playerCount: 2, layoutIndex: 0)..startTurns();
+        final game = Game(playerCount: 2, layoutIndex: 0)
+          ..startTurns()
+          ..beginTurn(0);
         now = now.add(const Duration(seconds: 30));
         game.endTurn();
         now = now.add(const Duration(seconds: 50));
@@ -223,6 +261,7 @@ void main() {
     test('the turn in progress is saved with the game', () {
       final game = Game()
         ..startTurns()
+        ..beginTurn(0)
         ..endTurn();
       final copy = Game.fromJson(game.toJson())!;
       expect(copy.turnPlayer, 1);

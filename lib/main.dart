@@ -5,6 +5,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'game/game.dart';
 import 'game/game_store.dart';
 import 'settings/app_settings.dart';
+import 'sound/device_sound_files.dart';
 import 'sound/sounds.dart';
 import 'widgets/game_screen.dart';
 
@@ -23,7 +24,15 @@ Future<void> main() async {
       WakelockPlus.toggle(enable: settings.keepScreenOn);
   applyKeepScreenOn();
   settings.addListener(applyKeepScreenOn);
-  runApp(MyApp(game: game, settings: settings, sounds: AudioSoundPlayer()));
+  final soundFiles = await DeviceSoundFiles.open();
+  runApp(
+    MyApp(
+      game: game,
+      settings: settings,
+      sounds: AudioSoundPlayer(soundFiles),
+      soundFiles: soundFiles,
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -32,16 +41,23 @@ class MyApp extends StatelessWidget {
     required this.game,
     required this.settings,
     required this.sounds,
+    required this.soundFiles,
   });
 
   final Game game;
   final AppSettings settings;
   final SoundPlayer sounds;
+  final SoundFiles soundFiles;
 
   @override
   Widget build(BuildContext context) {
     // Above the MaterialApp, so dialogs can play sounds too.
-    return SoundScope(settings: settings, player: sounds, child: _app());
+    return SoundScope(
+      settings: settings,
+      player: sounds,
+      files: soundFiles,
+      child: _app(),
+    );
   }
 
   Widget _app() {

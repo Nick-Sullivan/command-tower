@@ -51,23 +51,84 @@ enum Sound {
 
   String get asset => 'sounds/$_file';
 
-  /// The choices for [role], silence first.
+  /// The built-in choices for [role], silence first.
   static List<Sound> forRole(SoundRole role) => [
     none,
     for (final s in values)
       if (s.role == role) s,
   ];
+
+  SoundChoice get choice => SoundChoice(this);
 }
+
+/// A sound that can be chosen: built in, or a file the player imported.
+/// Saved by [id]: a built-in sound's name, or "file:" and the file's name.
+@immutable
+class SoundChoice {
+  const SoundChoice(Sound this.builtIn) : file = null;
+  const SoundChoice.file(String this.file) : builtIn = null;
+
+  static const none = SoundChoice(Sound.none);
+
+  final Sound? builtIn;
+
+  /// An imported file's name, within [SoundFiles].
+  final String? file;
+
+  bool get isNone => builtIn == Sound.none;
+
+  String get id => file == null ? builtIn!.name : 'file:$file';
+
+  /// A built-in sound's name, or an imported file's name without its
+  /// extension.
+  String get label {
+    final file = this.file;
+    if (file == null) return builtIn!.label;
+    final dot = file.lastIndexOf('.');
+    return dot > 0 ? file.substring(0, dot) : file;
+  }
+
+  @override
+  bool operator ==(Object other) => other is SoundChoice && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  @override
+  String toString() => 'SoundChoice($id)';
+}
+
+/// The sounds a player has imported, kept in the app's own storage so they
+/// survive the original being moved or deleted.
+abstract interface class SoundFiles {
+  /// Where an imported sound is stored.
+  String path(String file);
+
+  /// Asks for an audio file and copies it in, returning its name, or null if
+  /// the player backed out. Throws [SoundTooBig] for files over [maxBytes].
+  Future<String?> import();
+}
+
+/// An imported sound over the size limit: these are meant to be short clips.
+class SoundTooBig implements Exception {
+  const SoundTooBig();
+}
+
+/// The largest sound file that can be imported: 2 MB.
+const maxBytes = 2 * 1024 * 1024;
 
 /// Plays a sound. An interface so tests can listen in without audio.
 abstract interface class SoundPlayer {
-  void play(Sound sound);
+  void play(SoundChoice sound);
 }
 
 /// Plays through the device, with one low-latency player per sound. A sound
 /// played again before it finishes restarts, so rapid taps don't pile up.
 class AudioSoundPlayer implements SoundPlayer {
-  final _players = <Sound, AudioPlayer>{};
+  AudioSoundPlayer(this._files);
+
+  final SoundFiles _files;
+  final _players = <SoundChoice, AudioPlayer>{};
 
   /// Game sound effects: they mix with whatever else is playing and never
   /// take audio focus (which would pause someone's music on every tap). On
@@ -82,14 +143,19 @@ class AudioSoundPlayer implements SoundPlayer {
   );
 
   @override
-  Future<void> play(Sound sound) async {
-    if (sound == Sound.none) return;
+  Future<void> play(SoundChoice sound) async {
+    if (sound.isNone) return;
     final player = _players[sound] ??= AudioPlayer()
       ..setAudioContext(_context)
       ..setPlayerMode(PlayerMode.lowLatency)
       ..setReleaseMode(ReleaseMode.stop);
     await player.stop();
-    await player.play(AssetSource(sound.asset));
+    final file = sound.file;
+    await player.play(
+      file == null
+          ? AssetSource(sound.builtIn!.asset)
+          : DeviceFileSource(_files.path(file)),
+    );
   }
 }
 
@@ -100,11 +166,13 @@ class SoundScope extends InheritedWidget {
     super.key,
     required this.settings,
     required this.player,
+    required this.files,
     required super.child,
   });
 
   final AppSettings settings;
   final SoundPlayer player;
+  final SoundFiles files;
 
   static SoundScope? maybeOf(BuildContext context) =>
       context.getInheritedWidgetOfExactType<SoundScope>();
@@ -131,10 +199,12 @@ class SoundScope extends InheritedWidget {
     final scope = maybeOf(context);
     if (scope == null || !scope.settings.soundOn) return;
     final sound = scope.settings.sound(role);
-    if (sound != Sound.none) scope.player.play(sound);
+    if (!sound.isNone) scope.player.play(sound);
   }
 
   @override
   bool updateShouldNotify(SoundScope oldWidget) =>
-      settings != oldWidget.settings || player != oldWidget.player;
+      settings != oldWidget.settings ||
+      player != oldWidget.player ||
+      files != oldWidget.files;
 }

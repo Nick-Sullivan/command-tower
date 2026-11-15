@@ -21,13 +21,30 @@ Finder _textInSeat(int i, String text) =>
 
 /// Records what would have played, instead of playing it.
 class _FakeSounds implements SoundPlayer {
-  final played = <Sound>[];
+  final played = <SoundChoice>[];
 
   @override
-  void play(Sound sound) => played.add(sound);
+  void play(SoundChoice sound) => played.add(sound);
+}
+
+/// Stands in for the phone's file picker: [next] is what the next import
+/// returns, or [tooBig] makes it fail.
+class _FakeSoundFiles implements SoundFiles {
+  String? next;
+  bool tooBig = false;
+
+  @override
+  String path(String file) => '/imported/$file';
+
+  @override
+  Future<String?> import() async {
+    if (tooBig) throw const SoundTooBig();
+    return next;
+  }
 }
 
 late _FakeSounds _sounds;
+late _FakeSoundFiles _soundFiles;
 late Game _game;
 
 Future<AppSettings> _pumpApp(WidgetTester tester) async {
@@ -40,8 +57,14 @@ Future<AppSettings> _pumpApp(WidgetTester tester) async {
   final settings = await AppSettings.open();
   addTearDown(settings.dispose);
   _sounds = _FakeSounds();
+  _soundFiles = _FakeSoundFiles();
   await tester.pumpWidget(
-    MyApp(game: game, settings: settings, sounds: _sounds),
+    MyApp(
+      game: game,
+      settings: settings,
+      sounds: _sounds,
+      soundFiles: _soundFiles,
+    ),
   );
   return settings;
 }
@@ -704,9 +727,9 @@ void main() {
       final knockOut = settings.sound(SoundRole.knockedOut);
       expect(
         _sounds.played.where((s) => s == knockOut),
-        hasLength(knockOut == Sound.none ? 0 : 1),
+        hasLength(knockOut.isNone ? 0 : 1),
       );
-      expect(_sounds.played, isNot(contains(Sound.none)));
+      expect(_sounds.played, isNot(contains(SoundChoice.none)));
       await _settle(tester);
     });
 
@@ -720,12 +743,13 @@ void main() {
       await tester.pumpAndSettle();
       // The choices are there but greyed out until sound is on.
       final plusRow = find.byKey(const ValueKey(('sound', 'plus')));
-      DropdownMenu<Sound> plusMenu() => tester.widget<DropdownMenu<Sound>>(
-        find.descendant(
-          of: plusRow,
-          matching: find.byType(DropdownMenu<Sound>),
-        ),
-      );
+      DropdownMenu<SoundChoice> plusMenu() =>
+          tester.widget<DropdownMenu<SoundChoice>>(
+            find.descendant(
+              of: plusRow,
+              matching: find.byType(DropdownMenu<SoundChoice>),
+            ),
+          );
       expect(plusMenu().enabled, isFalse);
       await tester.tap(find.widgetWithText(SwitchListTile, 'Sound'));
       await tester.pumpAndSettle();
@@ -733,20 +757,101 @@ void main() {
 
       // Each row only offers its own kind of sound.
       final offered = [for (final e in plusMenu().dropdownMenuEntries) e.value];
-      expect(offered, contains(Sound.phaserUp));
-      expect(offered, isNot(contains(Sound.hurt)));
+      expect(offered, contains(Sound.phaserUp.choice));
+      expect(offered, isNot(contains(Sound.hurt.choice)));
 
       await tester.tap(
         find.descendant(
           of: plusRow,
-          matching: find.byType(DropdownMenu<Sound>),
+          matching: find.byType(DropdownMenu<SoundChoice>),
         ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.text('Phaser up').last);
       await tester.pumpAndSettle();
-      expect(settings.sound(SoundRole.plus), Sound.phaserUp);
-      expect(_sounds.played, [Sound.phaserUp]);
+      expect(settings.sound(SoundRole.plus), Sound.phaserUp.choice);
+      expect(_sounds.played, [Sound.phaserUp.choice]);
+    });
+
+    group('importing', () {
+      final plusMenu = find.descendant(
+        of: find.byKey(const ValueKey(('sound', 'plus'))),
+        matching: find.byType(DropdownMenu<SoundChoice>),
+      );
+
+      /// "Import…" is last in the list, which can scroll; bring it into view.
+      Future<void> tapImport(WidgetTester tester) async {
+        final entry = find.widgetWithText(MenuItemButton, 'Import…');
+        await tester.ensureVisible(entry);
+        await tester.pumpAndSettle();
+        await tester.tap(entry);
+        await tester.pumpAndSettle();
+      }
+
+      Future<AppSettings> openPlusMenu(
+        WidgetTester tester, {
+        String? importing,
+        bool tooBig = false,
+      }) async {
+        final settings = await _pumpApp(tester);
+        _soundFiles
+          ..next = importing
+          ..tooBig = tooBig;
+        settings.setSoundOn(true);
+        await tester.tap(find.byIcon(Icons.settings));
+        await tester.pumpAndSettle();
+        await _tapTab(tester, 'Device');
+        await tester.pumpAndSettle();
+        await tester.tap(plusMenu);
+        await tester.pumpAndSettle();
+        return settings;
+      }
+
+      testWidgets('Import… adds a file, chooses it and plays it', (
+        tester,
+      ) async {
+        final settings = await openPlusMenu(
+          tester,
+          importing: 'life points.mp3',
+        );
+        await tapImport(tester);
+        await tester.pumpAndSettle();
+
+        const imported = SoundChoice.file('life points.mp3');
+        expect(settings.sound(SoundRole.plus), imported);
+        expect(_sounds.played, [imported]);
+        // The field shows it, and every row can now choose it.
+        expect(
+          tester.widget<DropdownMenu<SoundChoice>>(plusMenu).initialSelection,
+          imported,
+        );
+        expect(settings.soundChoices(SoundRole.minus), contains(imported));
+      });
+
+      testWidgets('backing out of the picker changes nothing', (tester) async {
+        final settings = await openPlusMenu(tester);
+        final before = settings.sound(SoundRole.plus);
+        await tapImport(tester);
+        await tester.pumpAndSettle();
+        expect(settings.sound(SoundRole.plus), before);
+        expect(settings.importedSounds, isEmpty);
+        expect(
+          tester.widget<DropdownMenu<SoundChoice>>(plusMenu).initialSelection,
+          before,
+        );
+      });
+
+      testWidgets('a file over 2 MB is turned away', (tester) async {
+        final settings = await openPlusMenu(tester, tooBig: true);
+        final before = settings.sound(SoundRole.plus);
+        await tapImport(tester);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('too big'), findsOneWidget);
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+        expect(settings.sound(SoundRole.plus), before);
+        expect(settings.importedSounds, isEmpty);
+      });
     });
   });
 
@@ -849,6 +954,11 @@ void main() {
     const clockKey = ValueKey('turn-clock');
     String clockIn(WidgetTester tester, int seat) =>
         tester.widget<Text>(inSeat(seat, clockKey)).data!;
+    const startKey = ValueKey('start-turn');
+    Future<void> pushToStart(WidgetTester tester, int seat) async {
+      await tester.tap(inSeat(seat, startKey));
+      await tester.pump();
+    }
 
     testWidgets('off by default: no turns shown', (tester) async {
       await _pumpApp(tester);
@@ -864,7 +974,26 @@ void main() {
       settings.setTurnTimer(true);
       await tester.pump();
       await tester.pump();
+      // With nobody picked to go first, everyone can push to start, and
+      // it's nobody's turn yet.
+      expect(_game.turnPlayer, isNull);
+      expect(find.byKey(border), findsNothing);
+      expect(find.byKey(clockKey), findsNothing);
+      for (var seat = 0; seat < 4; seat++) {
+        expect(
+          find.descendant(
+            of: inSeat(seat, startKey),
+            matching: find.text('Push to start'),
+          ),
+          findsOneWidget,
+        );
+      }
+
+      // Whoever pushes first goes first, from 0:00.
+      await tester.pump(const Duration(seconds: 30));
+      await pushToStart(tester, 0);
       expect(_game.turnPlayer, 0);
+      expect(find.byKey(startKey), findsNothing);
       expect(inSeat(0, border), findsOneWidget);
       expect(find.byKey(border), findsOneWidget);
       expect(clockIn(tester, 0), '0:00');
@@ -919,6 +1048,7 @@ void main() {
       settings.setTurnTimer(true);
       await tester.pump();
       await tester.pump();
+      await pushToStart(tester, 0);
       await tester.pump(const Duration(seconds: 30));
       await tester.tap(inSeat(0, const ValueKey('end-turn')));
       await tester.pump();
@@ -940,11 +1070,61 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    group('with a random starting player', () {
+      Future<int> startWithRandomPlayer(WidgetTester tester) async {
+        final settings = await _pumpApp(tester);
+        settings.setTurnTimer(true);
+        settings.setRandomStartingPlayer(true);
+        await tester.pump();
+        await tester.pump();
+        await tester.tap(find.byIcon(Icons.settings));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Start'));
+        await tester.pump();
+        return _game.startingPlayer!;
+      }
+
+      testWidgets('the timer waits for the reveal, then starts with them', (
+        tester,
+      ) async {
+        final chosen = await startWithRandomPlayer(tester);
+        // Mid-spin: nothing gives the pick away.
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.pump();
+        expect(_game.turnPlayer, isNull);
+        expect(find.byKey(border), findsNothing);
+        expect(find.byKey(clockKey), findsNothing);
+
+        // Landed: their turn, waiting for them to push to start.
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump();
+        expect(_game.turnPlayer, chosen);
+        expect(inSeat(chosen, border), findsOneWidget);
+        expect(inSeat(chosen, startKey), findsOneWidget);
+        expect(find.byKey(clockKey), findsNothing);
+        await tester.pump(const Duration(seconds: 20));
+        await pushToStart(tester, chosen);
+        expect(clockIn(tester, chosen), '0:00');
+        await _settle(tester);
+      });
+
+      testWidgets('skipping the spin starts with them too', (tester) async {
+        final chosen = await startWithRandomPlayer(tester);
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tapAt(const Offset(20, 20));
+        await tester.pump();
+        await tester.pump();
+        expect(_game.turnPlayer, chosen);
+        await _settle(tester);
+      });
+    });
+
     testWidgets('the time stands still while the menu is open', (tester) async {
       final settings = await _pumpApp(tester);
       settings.setTurnTimer(true);
       await tester.pump();
       await tester.pump();
+      await pushToStart(tester, 0);
       await tester.pump(const Duration(seconds: 10));
       expect(clockIn(tester, 0), '0:10');
 

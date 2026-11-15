@@ -139,19 +139,37 @@ class AppSettings extends ChangeNotifier {
   };
 
   static String _soundKey(SoundRole role) => 'sound.${role.name}';
+  static const _importedSoundsKey = 'importedSounds';
+
+  /// Files the player has imported, oldest first.
+  List<String> get importedSounds =>
+      _prefs.getStringList(_importedSoundsKey) ?? const [];
+
+  void addImportedSound(String file) {
+    if (importedSounds.contains(file)) return;
+    _prefs.setStringList(_importedSoundsKey, [...importedSounds, file]);
+    notifyListeners();
+  }
+
+  /// What [role] can play: silence, its built-in sounds, then every imported
+  /// sound (any of which suits any role).
+  List<SoundChoice> soundChoices(SoundRole role) => [
+    for (final s in Sound.forRole(role)) s.choice,
+    for (final f in importedSounds) SoundChoice.file(f),
+  ];
 
   /// The sound chosen for [role]. A saved choice that's no longer offered
   /// for it (e.g. from an older version) falls back to the default.
-  Sound sound(SoundRole role) {
-    final name = _prefs.getString(_soundKey(role));
-    return Sound.forRole(role).where((s) => s.name == name).firstOrNull ??
-        _defaultSounds[role]!;
+  SoundChoice sound(SoundRole role) {
+    final id = _prefs.getString(_soundKey(role));
+    return soundChoices(role).where((s) => s.id == id).firstOrNull ??
+        _defaultSounds[role]!.choice;
   }
 
-  void setSound(SoundRole role, Sound sound) {
-    assert(Sound.forRole(role).contains(sound));
+  void setSound(SoundRole role, SoundChoice sound) {
+    assert(soundChoices(role).contains(sound));
     if (sound == this.sound(role)) return;
-    _prefs.setString(_soundKey(role), sound.name);
+    _prefs.setString(_soundKey(role), sound.id);
     notifyListeners();
   }
 

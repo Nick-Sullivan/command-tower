@@ -11,11 +11,15 @@ class StartingPlayerSpin extends StatefulWidget {
     super.key,
     required this.seatRects,
     required this.chosen,
+    this.onLanded,
   });
 
   /// Each seat's panel, on screen, in clockwise seat order.
   final List<Rect> seatRects;
   final int chosen;
+
+  /// Called once the highlight lands, e.g. to start the turn timer.
+  final VoidCallback? onLanded;
 
   /// Roughly how long the spin takes before landing.
   static const duration = Duration(milliseconds: 1500);
@@ -44,6 +48,7 @@ class _StartingPlayerSpinState extends State<StartingPlayerSpin> {
     if (hop == _hops) {
       SoundScope.vibrate(context);
       setState(() => _landed = true);
+      widget.onLanded?.call();
       return;
     }
     final t = hop / _hops;
