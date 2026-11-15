@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../game/game.dart';
 import 'crossed_swords.dart';
@@ -49,6 +48,7 @@ class PlayerPanel extends StatefulWidget {
     super.key,
     required this.life,
     required this.color,
+    this.knockedOut = false,
     required this.opponents,
     required this.onLifeChange,
     required this.onDamageChange,
@@ -56,6 +56,10 @@ class PlayerPanel extends StatefulWidget {
 
   final int life;
   final Color color;
+
+  /// Fogs the panel over. Everything still works, since some cards let a
+  /// player keep going.
+  final bool knockedOut;
 
   /// Ordered left to right from this player's seat.
   final List<Opponent> opponents;
@@ -103,10 +107,8 @@ class _PlayerPanelState extends State<PlayerPanel> {
     _trackLifeChange(-changed);
   }
 
-  void _toggleDamageMode() {
-    HapticFeedback.lightImpact();
-    setState(() => _damageMode = !_damageMode);
-  }
+  // No haptic here: the click is reserved for changes to the numbers.
+  void _toggleDamageMode() => setState(() => _damageMode = !_damageMode);
 
   @override
   void dispose() {
@@ -114,20 +116,39 @@ class _PlayerPanelState extends State<PlayerPanel> {
     super.dispose();
   }
 
+  /// A grey haze over a knocked-out panel: the colour still shows through,
+  /// but everything reads as out of play.
+  static const _fog = Color(0x99505050);
+
   @override
   Widget build(BuildContext context) {
     return Material(
       color: widget.color,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final size = constraints.biggest;
-          final barHeight = (size.height * 0.22).clamp(44.0, 72.0);
-          return _damageMode
-              ? _damageView(size, barHeight)
-              : _lifeView(size, barHeight);
-        },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final size = constraints.biggest;
+              final barHeight = (size.height * 0.22).clamp(44.0, 72.0);
+              return _damageMode
+                  ? _damageView(size, barHeight)
+                  : _lifeView(size, barHeight);
+            },
+          ),
+          // Over everything, but never in the way: a knocked-out player can
+          // still be kept alive by a card.
+          IgnorePointer(
+            child: AnimatedOpacity(
+              key: const ValueKey('fog'),
+              opacity: widget.knockedOut ? 1 : 0,
+              duration: const Duration(milliseconds: 300),
+              child: const ColoredBox(color: _fog),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -144,7 +165,25 @@ class _PlayerPanelState extends State<PlayerPanel> {
                 SizedBox(
                   height: size.height * 0.14,
                   width: size.width * 0.3,
-                  child: _deltaText(),
+                  // A knocked-out player gets a skull above their total, as
+                  // lethal commander damage does; a running change takes its
+                  // place while it's showing.
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      AnimatedOpacity(
+                        opacity: widget.knockedOut && !_showDelta ? 1 : 0,
+                        duration: const Duration(milliseconds: 300),
+                        child: const FittedBox(
+                          child: Skull(
+                            key: ValueKey('knocked-out-skull'),
+                            size: 48,
+                          ),
+                        ),
+                      ),
+                      _deltaText(),
+                    ],
+                  ),
                 ),
                 SizedBox(
                   height: size.height * 0.5,

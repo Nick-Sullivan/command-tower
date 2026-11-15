@@ -44,6 +44,7 @@ class GameScreen extends StatelessWidget {
                             key: ValueKey((game.generation, i)),
                             life: game.life[i],
                             color: playerColors[i],
+                            knockedOut: game.isKnockedOut(i),
                             opponents: [
                               for (final o in othersLeftToRight(
                                 game.layout,

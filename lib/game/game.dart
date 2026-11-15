@@ -35,6 +35,13 @@ class Game extends ChangeNotifier {
   int commanderDamage({required int to, required int from}) =>
       _commanderDamage[to][from];
 
+  /// Whether [player] would normally have lost: 0 or less life, or lethal
+  /// damage from one commander. Only shown, never enforced — some cards let
+  /// a player keep going.
+  bool isKnockedOut(int player) =>
+      _life[player] <= 0 ||
+      _commanderDamage[player].any((d) => d >= lethalCommanderDamage);
+
   void changeLife(int player, int delta) {
     _life[player] += delta;
     notifyListeners();

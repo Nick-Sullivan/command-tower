@@ -45,6 +45,26 @@ void main() {
     expect(game.life[0], 40);
   });
 
+  test('knocked out at 0 life or lethal damage from one commander', () {
+    final game = Game(playerCount: 3);
+    expect(game.isKnockedOut(0), isFalse);
+
+    game.changeLife(0, -40);
+    expect(game.isKnockedOut(0), isTrue);
+    game.changeLife(0, 1);
+    expect(game.isKnockedOut(0), isFalse);
+
+    // 20 from each of two commanders isn't lethal; 21 from one is, even
+    // with life left.
+    game.changeLife(1, 100);
+    game.changeCommanderDamage(to: 1, from: 0, delta: 20);
+    game.changeCommanderDamage(to: 1, from: 2, delta: 20);
+    expect(game.isKnockedOut(1), isFalse);
+    game.changeCommanderDamage(to: 1, from: 2, delta: 1);
+    expect(game.life[1], 99);
+    expect(game.isKnockedOut(1), isTrue);
+  });
+
   test('a new game resets life and moves to the next generation', () {
     final game = Game();
     final before = game.generation;

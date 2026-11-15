@@ -84,6 +84,15 @@ void main() {
 
     await tester.tapAt(Offset(rect.left + rect.width / 4, rect.center.dy));
     await tester.tapAt(Offset(rect.right - rect.width / 4, rect.center.dy));
+    // Switching to commander damage and back isn't a change, so no click.
+    final swords = find.descendant(
+      of: _seat(_bottom),
+      matching: find.byKey(const ValueKey('commander-damage')),
+    );
+    await tester.tap(swords);
+    await tester.pump();
+    await tester.tap(swords);
+    await tester.pump();
     expect(haptics, [
       'HapticFeedbackType.lightImpact',
       'HapticFeedbackType.lightImpact',
@@ -131,6 +140,62 @@ void main() {
     await gesture.up();
     await tester.pump(const Duration(seconds: 1));
     expect(_textInSeat(_bottom, '20'), findsOneWidget);
+    await _settle(tester);
+  });
+
+  testWidgets('at 0 life the panel fogs over but keeps working', (
+    tester,
+  ) async {
+    await _pumpApp(tester);
+    final rect = tester.getRect(_seat(_bottom));
+    final minus = Offset(rect.left + rect.width / 4, rect.center.dy);
+    final plus = Offset(rect.right - rect.width / 4, rect.center.dy);
+    double fog() => tester
+        .widget<AnimatedOpacity>(
+          find.descendant(
+            of: _seat(_bottom),
+            matching: find.byKey(const ValueKey('fog')),
+          ),
+        )
+        .opacity;
+
+    // Hold to drop from 40 to 0.
+    final gesture = await tester.startGesture(minus);
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 600));
+    }
+    await gesture.up();
+    expect(_textInSeat(_bottom, '0'), findsOneWidget);
+    expect(fog(), 1);
+    double skull() => tester
+        .widget<AnimatedOpacity>(
+          find
+              .ancestor(
+                of: find.descendant(
+                  of: _seat(_bottom),
+                  matching: find.byKey(const ValueKey('knocked-out-skull')),
+                ),
+                matching: find.byType(AnimatedOpacity),
+              )
+              .first,
+        )
+        .opacity;
+    // The running change shows first; the skull once it fades.
+    expect(skull(), 0);
+    await tester.pump(const Duration(seconds: 3));
+    expect(skull(), 1);
+
+    // Still going below 0, and back up again.
+    await tester.tapAt(minus);
+    await tester.pump();
+    expect(_textInSeat(_bottom, '−1'), findsWidgets);
+    await tester.tapAt(plus);
+    await tester.tapAt(plus);
+    await tester.pump();
+    expect(_textInSeat(_bottom, '1'), findsOneWidget);
+    expect(fog(), 0);
+    expect(skull(), 0);
     await _settle(tester);
   });
 
