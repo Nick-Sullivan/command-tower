@@ -13,6 +13,7 @@ dependencies:
   flutter:
     sdk: flutter
   path_provider: ^2.1.5
+  record: ^6.2.1
   shared_preferences: ^2.5.3
   wakelock_plus: ^1.4.0
 

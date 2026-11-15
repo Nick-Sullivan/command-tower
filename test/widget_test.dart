@@ -41,10 +41,42 @@ class _FakeSoundFiles implements SoundFiles {
     if (tooBig) throw const SoundTooBig();
     return next;
   }
+
+  var _recordings = 0;
+  final discarded = <String>[];
+
+  @override
+  String newRecording() => '.recording-${++_recordings}.m4a';
+
+  @override
+  Future<String> keepRecording(String file, String name) async => '$name.m4a';
+
+  @override
+  Future<void> discard(String file) async => discarded.add(file);
+}
+
+/// Stands in for the microphone: [permitted] is whether it may be used, and
+/// [calls] what was asked of it.
+class _FakeRecorder implements SoundRecorder {
+  bool permitted = true;
+  final calls = <String>[];
+
+  @override
+  Future<bool> hasPermission() async => permitted;
+
+  @override
+  Future<void> start(String path) async => calls.add('start $path');
+
+  @override
+  Future<void> stop() async => calls.add('stop');
+
+  @override
+  Future<void> cancel() async => calls.add('cancel');
 }
 
 late _FakeSounds _sounds;
 late _FakeSoundFiles _soundFiles;
+late _FakeRecorder _recorder;
 late Game _game;
 
 Future<AppSettings> _pumpApp(WidgetTester tester) async {
@@ -58,12 +90,14 @@ Future<AppSettings> _pumpApp(WidgetTester tester) async {
   addTearDown(settings.dispose);
   _sounds = _FakeSounds();
   _soundFiles = _FakeSoundFiles();
+  _recorder = _FakeRecorder();
   await tester.pumpWidget(
     MyApp(
       game: game,
       settings: settings,
       sounds: _sounds,
       soundFiles: _soundFiles,
+      recorder: _recorder,
     ),
   );
   return settings;
@@ -779,14 +813,18 @@ void main() {
         matching: find.byType(DropdownMenu<SoundChoice>),
       );
 
-      /// "Import…" is last in the list, which can scroll; bring it into view.
-      Future<void> tapImport(WidgetTester tester) async {
-        final entry = find.widgetWithText(MenuItemButton, 'Import…');
+      /// "Import…" and "Record…" are last in the list, which can scroll;
+      /// bring the entry into view.
+      Future<void> tapEntry(WidgetTester tester, String label) async {
+        final entry = find.widgetWithText(MenuItemButton, label);
         await tester.ensureVisible(entry);
         await tester.pumpAndSettle();
         await tester.tap(entry);
         await tester.pumpAndSettle();
       }
+
+      Future<void> tapImport(WidgetTester tester) =>
+          tapEntry(tester, 'Import…');
 
       Future<AppSettings> openPlusMenu(
         WidgetTester tester, {
@@ -851,6 +889,112 @@ void main() {
         await tester.pumpAndSettle();
         expect(settings.sound(SoundRole.plus), before);
         expect(settings.importedSounds, isEmpty);
+      });
+
+      group('recording', () {
+        final mic = find.byKey(const ValueKey('record'));
+        final save = find.widgetWithText(FilledButton, 'Save');
+        bool saveEnabled(WidgetTester tester) =>
+            tester.widget<FilledButton>(save).onPressed != null;
+
+        Future<void> hold(WidgetTester tester, Duration time) async {
+          final gesture = await tester.startGesture(tester.getCenter(mic));
+          await tester.pump(time);
+          await gesture.up();
+          await tester.pumpAndSettle();
+        }
+
+        testWidgets('hold to record, name it and save it', (tester) async {
+          final settings = await openPlusMenu(tester);
+          await tapEntry(tester, 'Record…');
+          expect(find.text('Recording 1'), findsOneWidget);
+          expect(saveEnabled(tester), isFalse);
+
+          await hold(tester, const Duration(seconds: 1));
+          expect(_recorder.calls, ['start /imported/.recording-1.m4a', 'stop']);
+          // It plays back on release.
+          expect(_sounds.played, [const SoundChoice.file('.recording-1.m4a')]);
+          expect(saveEnabled(tester), isTrue);
+
+          await tester.enterText(
+            find.byKey(const ValueKey('recording-name')),
+            'Ouch',
+          );
+          await tester.tap(save);
+          await tester.pumpAndSettle();
+
+          const kept = SoundChoice.file('Ouch.m4a');
+          expect(settings.importedSounds, ['Ouch.m4a']);
+          expect(settings.sound(SoundRole.plus), kept);
+          expect(_sounds.played.last, kept);
+          expect(_soundFiles.discarded, isEmpty);
+        });
+
+        testWidgets('play hears it again before saving', (tester) async {
+          await openPlusMenu(tester);
+          await tapEntry(tester, 'Record…');
+          final play = find.byKey(const ValueKey('play-recording'));
+          expect(play, findsNothing);
+          await hold(tester, const Duration(seconds: 1));
+          _sounds.played.clear();
+          await tester.tap(play);
+          await tester.pump();
+          expect(_sounds.played, [const SoundChoice.file('.recording-1.m4a')]);
+          // Play sits beside the mic, level with it.
+          expect(tester.getCenter(play).dy, tester.getCenter(mic).dy);
+          expect(
+            tester.getCenter(play).dx,
+            greaterThan(tester.getCenter(mic).dx),
+          );
+
+          // A tap on the mic is too short to replace the recording.
+          await hold(tester, const Duration(milliseconds: 100));
+          expect(_recorder.calls.last, 'cancel');
+          await tester.tap(play);
+          await tester.pump();
+          expect(
+            _sounds.played.last,
+            const SoundChoice.file('.recording-1.m4a'),
+          );
+        });
+
+        testWidgets('recording stops by itself after 5 seconds', (
+          tester,
+        ) async {
+          await openPlusMenu(tester);
+          await tapEntry(tester, 'Record…');
+          final gesture = await tester.startGesture(tester.getCenter(mic));
+          await tester.pump(const Duration(seconds: 6));
+          await tester.pump();
+          expect(_recorder.calls.last, 'stop');
+          expect(saveEnabled(tester), isTrue);
+          await gesture.up();
+          await tester.pumpAndSettle();
+          expect(_recorder.calls.where((c) => c == 'stop'), hasLength(1));
+        });
+
+        testWidgets('cancel keeps nothing', (tester) async {
+          final settings = await openPlusMenu(tester);
+          final before = settings.sound(SoundRole.plus);
+          await tapEntry(tester, 'Record…');
+          await hold(tester, const Duration(seconds: 1));
+          await tester.tap(find.text('Cancel'));
+          await tester.pumpAndSettle();
+          expect(settings.importedSounds, isEmpty);
+          expect(settings.sound(SoundRole.plus), before);
+          expect(_soundFiles.discarded, ['.recording-1.m4a']);
+        });
+
+        testWidgets('without the microphone, it says so', (tester) async {
+          await openPlusMenu(tester);
+          _recorder.permitted = false;
+          await tapEntry(tester, 'Record…');
+          expect(find.text('Allow microphone access to record.'), findsOne);
+          expect(mic, findsNothing);
+          await tester.tap(find.text('OK'));
+          await tester.pumpAndSettle();
+          expect(_recorder.calls, isEmpty);
+        });
       });
     });
   });

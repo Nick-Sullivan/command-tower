@@ -6,6 +6,7 @@ import 'game/game.dart';
 import 'game/game_store.dart';
 import 'settings/app_settings.dart';
 import 'sound/device_sound_files.dart';
+import 'sound/device_sound_recorder.dart';
 import 'sound/sounds.dart';
 import 'widgets/game_screen.dart';
 
@@ -31,6 +32,7 @@ Future<void> main() async {
       settings: settings,
       sounds: AudioSoundPlayer(soundFiles),
       soundFiles: soundFiles,
+      recorder: DeviceSoundRecorder(),
     ),
   );
 }
@@ -42,12 +44,14 @@ class MyApp extends StatelessWidget {
     required this.settings,
     required this.sounds,
     required this.soundFiles,
+    required this.recorder,
   });
 
   final Game game;
   final AppSettings settings;
   final SoundPlayer sounds;
   final SoundFiles soundFiles;
+  final SoundRecorder recorder;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +60,7 @@ class MyApp extends StatelessWidget {
       settings: settings,
       player: sounds,
       files: soundFiles,
+      recorder: recorder,
       child: _app(),
     );
   }

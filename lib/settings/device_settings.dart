@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../sound/sounds.dart';
 import '../widgets/skull.dart';
 import 'app_settings.dart';
+import 'record_sound_dialog.dart';
 
 /// How the phone behaves: sound, vibration and keeping the screen on, then a
 /// sound for each moment: losing life, gaining life, and a player being
@@ -85,8 +86,9 @@ class _SkullIcon extends StatelessWidget {
   }
 }
 
-/// One row's sound: a dropdown of its choices, with "Import…" last to add a
-/// sound file from the phone. Picking a sound plays it.
+/// One row's sound: a dropdown of its choices, with "Import…" and "Record…"
+/// last to add a sound file from the phone or the microphone. Picking a sound
+/// plays it.
 class _SoundChoice extends StatefulWidget {
   const _SoundChoice({
     super.key,
@@ -114,6 +116,9 @@ class _SoundChoice extends StatefulWidget {
 class _SoundChoiceState extends State<_SoundChoice> {
   /// Stands in for the "Import…" entry; never saved or played.
   static const _import = SoundChoice.file('\u0000import');
+
+  /// Likewise "Record…".
+  static const _record = SoundChoice.file('\u0000record');
 
   /// Bumped to redraw the field after an import, so a cancelled one goes back
   /// to showing the current sound.
@@ -146,6 +151,22 @@ class _SoundChoiceState extends State<_SoundChoice> {
     if (mounted) setState(() => _redraws++);
   }
 
+  Future<void> _recordSound() async {
+    final scope = SoundScope.maybeOf(context);
+    if (scope == null) return;
+    final labels = {for (final c in widget.choices) c.label};
+    var n = 1;
+    while (labels.contains('Recording $n')) {
+      n++;
+    }
+    final file = await RecordSoundDialog.show(context, name: 'Recording $n');
+    if (file != null) {
+      widget.onImported(file);
+      scope.player.play(SoundChoice.file(file));
+    }
+    if (mounted) setState(() => _redraws++);
+  }
+
   @override
   Widget build(BuildContext context) {
     // A dropdown rather than chips: each row has many sounds, and chips for
@@ -166,11 +187,20 @@ class _SoundChoiceState extends State<_SoundChoice> {
           label: 'Import…',
           leadingIcon: Icon(Icons.upload_file),
         ),
+        const DropdownMenuEntry(
+          value: _record,
+          label: 'Record…',
+          leadingIcon: Icon(Icons.mic),
+        ),
       ],
       onSelected: (sound) {
         if (sound == null) return;
         if (sound == _import) {
           _importSound();
+          return;
+        }
+        if (sound == _record) {
+          _recordSound();
           return;
         }
         widget.onSelected(sound);

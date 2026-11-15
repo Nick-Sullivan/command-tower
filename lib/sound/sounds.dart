@@ -107,7 +107,36 @@ abstract interface class SoundFiles {
   /// Asks for an audio file and copies it in, returning its name, or null if
   /// the player backed out. Throws [SoundTooBig] for files over [maxBytes].
   Future<String?> import();
+
+  /// A fresh file name to record into. Each recording gets its own, so a
+  /// re-recording never plays back an earlier one the player has cached.
+  String newRecording();
+
+  /// Keeps the recording in [file] as a sound called [name], returning its
+  /// file name.
+  Future<String> keepRecording(String file, String name);
+
+  /// Deletes [file], e.g. a recording that wasn't kept.
+  Future<void> discard(String file);
 }
+
+/// Records from the microphone. An interface so tests can fake it.
+abstract interface class SoundRecorder {
+  /// Whether the app may use the microphone, asking the first time.
+  Future<bool> hasPermission();
+
+  /// Starts recording into [path].
+  Future<void> start(String path);
+
+  /// Stops recording, keeping what was recorded.
+  Future<void> stop();
+
+  /// Stops recording, throwing it away.
+  Future<void> cancel();
+}
+
+/// How long a recording can be: a sound for a tap should be short.
+const maxRecording = Duration(seconds: 5);
 
 /// An imported sound over the size limit: these are meant to be short clips.
 class SoundTooBig implements Exception {
@@ -167,12 +196,14 @@ class SoundScope extends InheritedWidget {
     required this.settings,
     required this.player,
     required this.files,
+    required this.recorder,
     required super.child,
   });
 
   final AppSettings settings;
   final SoundPlayer player;
   final SoundFiles files;
+  final SoundRecorder recorder;
 
   static SoundScope? maybeOf(BuildContext context) =>
       context.getInheritedWidgetOfExactType<SoundScope>();

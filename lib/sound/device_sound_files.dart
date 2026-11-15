@@ -15,8 +15,21 @@ class DeviceSoundFiles implements SoundFiles {
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.path}/sounds');
     await dir.create(recursive: true);
-    return DeviceSoundFiles(dir);
+    final files = DeviceSoundFiles(dir);
+    await files.discardUnkept();
+    return files;
   }
+
+  /// Deletes recordings that were never kept, left behind if the app closed
+  /// while recording.
+  Future<void> discardUnkept() async {
+    await for (final f in _dir.list()) {
+      final name = f.uri.pathSegments.last;
+      if (f is File && name.startsWith(_recordingPrefix)) await f.delete();
+    }
+  }
+
+  static const _recordingPrefix = '.recording-';
 
   @override
   String path(String file) => '${_dir.path}/$file';
@@ -31,6 +44,32 @@ class DeviceSoundFiles implements SoundFiles {
     final name = _unusedName(source.name);
     await File(sourcePath).copy(path(name));
     return name;
+  }
+
+  @override
+  String newRecording() =>
+      '$_recordingPrefix${DateTime.now().microsecondsSinceEpoch}.m4a';
+
+  @override
+  Future<String> keepRecording(String file, String name) async {
+    final kept = _unusedName('${safeFileName(name)}.m4a');
+    await File(path(file)).rename(path(kept));
+    return kept;
+  }
+
+  @override
+  Future<void> discard(String file) async {
+    final f = File(path(file));
+    if (await f.exists()) await f.delete();
+  }
+
+  /// [name] without characters a file name can't have; "Recording" if
+  /// nothing's left.
+  static String safeFileName(String name) {
+    final safe = name.replaceAll(RegExp(r'[/\\:*?"<>|\x00-\x1f]'), '').trim();
+    // A leading dot would hide the file, like a recording in progress.
+    final visible = safe.replaceFirst(RegExp(r'^\.+'), '');
+    return visible.isEmpty ? 'Recording' : visible;
   }
 
   /// [name], or "name (2).mp3" and so on if that's taken.
